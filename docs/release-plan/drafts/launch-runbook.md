@@ -2,9 +2,9 @@
 
 Open this when something looks wrong. Each part stands alone.
 
-Three things are live: the API (`fandex-api`, `api.fandex.org`, a Worker on D1), the website (`fandex-web`, fandex.org, static files plus a small Worker) and the Android app. All three run on Cloudflare's free plan unless part 1 changed that.
+Three things are live: the API (`fandex-api`, `api.fandex.org`, a Worker on D1), the website (`fandex-web`, fandex.org, static files plus a small Worker) and the Android app. All of it runs on Cloudflare's free plan, and stays there: Nils decided against Workers Paid (no added cost). **Nothing in this runbook buys a limit back.** Every fix is a switch, a lower cap, or waiting for the day to turn.
 
-**Every daily cap and every D1 daily allowance resets at midnight UTC. In February that is 01:00 in Germany.**
+**Every free-plan daily limit, every daily cap and every D1 daily allowance resets at midnight UTC. In February that is 01:00 in Germany.**
 
 Run every `npx wrangler` command from `worker/` unless the step says otherwise. Run every `node` command from the repo root.
 
@@ -43,10 +43,12 @@ curl https://api.fandex.org/v1/health
 
   Normal: `"ok":true`, and `today` shows small numbers. `openProviderCircuits` is `{}` (this is one isolate's view only).
 
-### The plan
+### The free plan
 
-- [ ] Decide on Workers Paid ($5 a month) today, not during the spike. On the free plan a request gets 10 ms of CPU. The fetch paths measured up to 19 to 20 ms on a cold isolate (live Worker, `wrangler tail`, `docs/worker.md`). Paid lifts the CPU limit to 30 seconds. If you stay on Free, the first `1102` error on launch day is the signal to upgrade.
-- [ ] Note which plan the account is on, in the Cloudflare dashboard, Workers and Pages.
+- [ ] Check in the Cloudflare dashboard that the account is on the Workers Free plan, as decided. Nothing below assumes anything else.
+- [ ] Write down a normal day's numbers from the dashboard, so launch day has something to compare with: Workers requests for the whole account (all three Workers together), D1 rows read and D1 rows written. None of the three has a measured normal day except reads (about 290,000, live D1, 2026-10-15).
+- [ ] Read part 3, "What breaks first". On launch day the daily limits are the risk, not the code.
+- [ ] Cloudflare emails the account when D1's daily read or write limit is reached (Cloudflare's D1 changelog, 2026-09-01). Check that the account's address is one you will see on the day.
 
 ### Backups
 
@@ -92,7 +94,7 @@ npx wrangler login
 | Play Console | the `org.fandex.app` entry |
 | A terminal in `worker/` | for `wrangler tail` and `d1 insights` |
 
-**Do not keep `/dev/users` open or refresh it.** It read 30,597 rows a view with one account (live D1, 2026-10-11), and it grows with every account. 160 views spent a whole day then; with launch-day accounts it costs far more.
+**Do not keep `/dev/users` open or refresh it.** It read 30,597 rows a view with one account (live D1, 2026-10-11), and it grows with every account. 160 views would have spent a whole day's reads then (`docs/worker.md`); with launch-day accounts it costs far more.
 
 ---
 
@@ -101,11 +103,11 @@ npx wrangler login
 | Signal | Where to look | Normal | Act at |
 |---|---|---|---|
 | API answers | `curl https://api.fandex.org/v1/health` | `"ok":true` | Any non-200, or a D1 error in the body |
-| CPU over the limit | `npx wrangler tail fandex-api --format json`: look for `"outcome":"exceededCpu"`; error 1102 in a browser | Reads 1 to 8 ms; fetch paths 4 to 7 ms warm, up to 19 to 20 ms cold (live Worker, `wrangler tail`, 2026-10). About fifty cold requests, none terminated. | The first 1102 or `exceededCpu`. Go to Workers Paid. |
-| D1 rows read today | `npx wrangler d1 insights fandex --timePeriod 1d --sort-type sum --sort-by reads --limit 15 --json` (works while D1 refuses queries); dashboard D1 Metrics | About 290,000 rows in a day (live D1, 2026-10-15) | 2.5 million (half of the 5 million). Find the top query in the insights output. |
-| D1 rows written today | Dashboard D1 Metrics | No measured normal day. The seed cost 79,770 (D1's own count, 2026-10-04). | 60,000. Past 100,000 every query fails until 01:00. |
+| **Requests today, whole account** | Dashboard, Workers and Pages overview (all three Workers count against one 100,000) | Not measured | 60,000. Past 100,000 every Worker answers error 1027 until 01:00 (part 3). |
+| **D1 rows written today** | Dashboard D1 Metrics | No measured normal day. The seed cost 79,770 (D1's own count, 2026-10-04). | 60,000. Past 100,000 every query fails until 01:00. |
+| **D1 rows read today** | `npx wrangler d1 insights fandex --time-period 1d --sort-type sum --sort-by reads --limit 15 --json` (works while D1 refuses queries); dashboard D1 Metrics | About 290,000 rows in a day (live D1, 2026-10-15) | 2.5 million (half of the 5 million). Find the top query in the insights output. |
+| CPU over the limit | `npx wrangler tail fandex-api --format json`: look for `"outcome":"exceededCpu"`; error 1102 in a browser | Reads 1 to 8 ms; fetch paths 4 to 7 ms warm, up to 19 to 20 ms cold (live Worker, `wrangler tail`, `docs/worker.md`). About fifty cold requests, none terminated. | 1102 on more than the odd request. Part 3, "CPU", says what to turn down. |
 | Daily budgets spent | `curl https://api.fandex.org/v1/health` shows `fetches`, `userWrites`, `hardcover`, `covers`. For every budget, see the query below. | Far under each cap (STATUS.md) | 75% of any cap in part 3 |
-| Requests per day | Dashboard, `fandex-api` Metrics | Not measured | 75,000 on the free plan (limit 100,000 a day) |
 | A provider failing | `/v1/health` `openProviderCircuits`; `wrangler tail` | `{}` | A host listed there is being refused by this isolate |
 | Rate limiting (429) | `wrangler tail`: status 429 with `rate-limited` | Rare | Many 429s from different users, which means shared IPs are hitting a limit |
 | Budget refusals (503) | `wrangler tail`: status 503 with `budget-exhausted` | None | The first one. Part 3 says which cap and what raises it. |
@@ -125,19 +127,34 @@ A row named `user_writes:{id}` is one account's share.
 
 ## 3. The limits
 
-### Platform limits (Cloudflare free plan, read 2026-10-04)
+### What breaks first on the free plan
 
-| Limit | Value | What users see when it is hit | What raises it |
+Three daily limits can each stop Fandex for the rest of the UTC day, and none of them can be raised while Nils stays on the free plan. All three are **per account**, shared by the API, the website's Worker and the www redirect. Watch these three before anything else.
+
+1. **Workers requests: 100,000 a day, the whole account** (Cloudflare limits page, read 2026-11-22; `worker/wrangler.jsonc` lines 3 to 7). Past it, a Worker answers **error 1027** until 01:00. What still works: fandex.org's static pages, because a request that matches a file never runs the Worker (`mobile/web/wrangler.jsonc` has no `run_worker_first`; Cloudflare: "Requests to static assets are free and unlimited"). What stops: every API call from the app, every `/v1/*` call from the website (sign-in, ratings, search beyond the device), and the pageview beacon. What spends it:
+   - every app start and sync (several API calls each; never counted),
+   - every website pageview, which sends one beacon to `/v1/t/pv` even after `DAILY_PAGEVIEW_CAP` stops counting (`PV_SCRIPT` in `mobile/web/build.mjs`),
+   - the two cron triggers, about 1,584 runs a day (`worker/wrangler.jsonc:42`, every minute and every ten minutes), if cron runs count. [not verified]
+   Lowering a cap does not save requests: a refused call is still a request. The only lever is fewer calls, and there is no switch for that.
+2. **D1 rows written: 100,000 a day.** Past it **every query fails until 01:00, reads included**, `/v1/health` too. The caps inside the API do NOT add up to less than this. At their defaults: new titles about 24,000 (2,000 × about 12), user writes 40,000, counted pageviews 15,000 (5,000 × 3), plus one counter write for every capped call that fits (up to 4,000 catalog pages, 4,000 Hardcover calls, 3,000 covers, 150 calendar builds, one per lookup call). That is about 90,000 before the cron and before any sign-up, which no cap covers. **If writes pass 60,000 by the afternoon, lower `DAILY_PAGEVIEW_CAP` first** (it costs only statistics), then `DAILY_COVER_CAP` and `HARDCOVER_DAILY_CAP`.
+3. **D1 rows read: 5,000,000 a day.** Past it every query fails until 01:00 (this happened on 2026-10-10). The two open read routes are capped at about 2.2 million together (`DAILY_DELTA_CAP` and `DAILY_LOOKUP_CAP`, in the caps table below). Not capped: a signed-in device's state pull (up to 4,000 rows a page, `worker/src/index.ts:752`, rate limited only), the admin pages and the nightly export.
+4. **CPU: 10 ms a request and a cron run.** Not a daily limit, but the one that can fail single requests all day. Reads are far inside it. Fetching a new title from TMDB or IGDB and building a calendar month reach 19 to 20 ms on a cold isolate. Cloudflare tolerates the odd one and terminates a Worker that does it consistently (error 1102). If 1102 shows up often: set `IGDB_ENABLED` to `0` if the 1102s are on game routes, and lower `DAILY_CALENDAR_CAP` if they are on calendar months. New films and shows have no switch of their own: `DAILY_FETCH_CAP` needs a deploy (part 4).
+
+### Platform limits (Cloudflare free plan)
+
+Read 2026-10-04 for the repo (`worker/wrangler.jsonc` lines 3 to 7, `docs/worker.md` "Limits") and checked against Cloudflare's limits page on 2026-11-22.
+
+| Limit | Value | What users see when it is hit | What you can do on the free plan |
 |---|---|---|---|
-| CPU per request and per cron run | 10 ms | Error 1102 on the request Cloudflare terminates. It tolerates going over now and then, and terminates a Worker that does it consistently. | Workers Paid, $5 a month: 30 seconds |
-| Requests per day | 100,000 | Not verified what the free plan shows past it | Workers Paid |
-| Subrequests per invocation | 50 | That request fails | Not raisable by a switch |
-| D1 queries per invocation | 50 | That request fails | Not raisable by a switch |
-| D1 rows read per day | 5,000,000 | **Every query fails until 01:00, `/v1/health` included.** Happened on 2026-10-10. The static website keeps serving. | Workers Paid (D1's paid allowance; not checked in the repo) |
-| D1 rows written per day | 100,000 | **Every query fails until 01:00, reads included.** | Workers Paid (not checked in the repo) |
+| Requests per day, whole account | 100,000 | Error 1027 from every Worker path until 01:00. Static pages on fandex.org still load. | Nothing until 01:00 |
+| D1 rows written per day | 100,000 | **Every query fails until 01:00, reads included.** | Lower the caps early (above). Nothing once it is hit |
+| D1 rows read per day | 5,000,000 | **Every query fails until 01:00, `/v1/health` included.** The static website keeps serving. | Lower `DAILY_DELTA_CAP` and `DAILY_LOOKUP_CAP` early. Nothing once it is hit |
+| CPU per request and per cron run | 10 ms | Error 1102 on a request Cloudflare terminates | Turn the fetching route down (above) |
+| Subrequests per invocation | 50 | That request fails | Nothing |
+| D1 queries per invocation | 50 | That request fails | Nothing |
 | D1 database size | 500 MB (110 MB after the seed, 2026-10-04) | Writes fail | Not a launch-day risk |
-| Website files per deploy | 20,000 | The publish fails | Not a launch-day risk |
-| R2 free tier | 10 GB, 1 million writes, 10 million reads a month | Not verified | Not a launch-day risk |
+| Website files per deploy | 20,000 (10,101 in the build of 2026-11-21) | The publish fails | Not a launch-day risk |
+| R2 free tier | 10 GB, 1 million writes, 10 million reads a month (Cloudflare's figures, not in the repo) | Not verified | Not a launch-day risk |
 
 ### Daily caps inside the API (reset 01:00)
 
@@ -157,14 +174,14 @@ A refused cap answers **503 `budget-exhausted`**. Each is read at call time, so 
 | `DAILY_COVER_CAP` | 3,000 | `worker/src/covers.ts:92` | Book covers copied from Hardcover | "No more covers can be copied today." Covers already copied still serve. | R2 writes |
 | `DAILY_BASELINE_CAP` | 2,500 | `worker/src/baseline.ts:94` | The baseline walk (finished for draw 1) | Nothing; the walk is parked | Not a launch-day concern |
 | `DAILY_PAGEVIEW_CAP` | 5,000 | `worker/src/telemetry.ts:159` | Website pageviews counted | Nothing: the beacon answers 200 and stops counting | 3 row writes a view |
-| `platform_builds` | 40 (in code) | `worker/src/index.ts:162` | Per-country platform list builds | "This country's line-up is not built yet." | Code change |
-| `baseline_builds` | 24 (in code) | `worker/src/index.ts:172` | Baseline list rebuilds | "The baseline list is not built yet." | Code change |
+| `platform_builds` | 40 (in code) | `worker/src/index.ts:163` | Per-country platform list builds | "This country's line-up is not built yet." | Code change |
+| `baseline_builds` | 24 (in code) | `worker/src/index.ts:173` | Baseline list rebuilds | "The baseline list is not built yet." | Code change |
 
 The defaults are the `DEFAULT_*` constants beside each line. `DAILY_FETCH_CAP` is also set in `worker/wrangler.jsonc` (`"2000"`); the others are not set anywhere and use the default.
 
 **Before raising a read cap, add up the reads.** Delta at 4,000 pages (1.6M) plus lookup at 300,000 refs (0.6M) is already under half of the 5M on purpose (`docs/worker.md`). Raising both can let the open routes spend the whole day's reads.
 
-**Before raising a write cap, add up the writes.** Fetch (~24,000) plus user writes (40,000) plus the cron is most of D1's 100,000.
+**Do not raise a write cap on the free plan.** Fetch (~24,000), user writes (40,000) and counted pageviews (15,000), with the counter writes, are already about 90,000 of D1's 100,000 before the cron ("What breaks first", above).
 
 ### Rate limits (per Cloudflare location, not exact)
 
@@ -209,14 +226,14 @@ Wrangler asks for the value. Type it (for example `0`) and press Enter. The valu
 npx wrangler secret delete IGDB_ENABLED
 ```
 
-Replace `IGDB_ENABLED` with the switch's name. `wrangler secret put` and `wrangler secret delete` exist in the repo's Wrangler (4.162.0); `push-secrets.mjs` uses the same `secret` commands.
+Replace `IGDB_ENABLED` with the switch's name. `wrangler secret put <key>` and `wrangler secret delete <key>` exist in the repo's Wrangler (4.162.0, `--help` read 2026-11-22). `push-secrets.mjs` uses `wrangler secret bulk` instead (`worker/scripts/push-secrets.mjs:7`).
 
 ### The switches
 
 | Switch | Value to turn down | Read in | What users then see | Turn it back on |
 |---|---|---|---|---|
 | `IGDB_ENABLED` | `0` (or `false`) | `src/lib/sources/igdb.ts:43`, declared `worker/src/env.ts:63` | No IGDB call anywhere. Games' browse and search are empty. Games already stored still open. The cron's IGDB step stops. | `npx wrangler secret delete IGDB_ENABLED` (default is ON) |
-| `HARDCOVER_ENABLED` | `0` (or `false`) | `src/lib/sources/hardcover.ts:67`, passed in at `worker/src/hardcover.ts:22` | Books come from Open Library alone, as before Hardcover. `/v1/features` says `hardcover: false`. A new cover copy is refused; copied covers still serve. The Hardcover walk stops. | `npx wrangler secret delete HARDCOVER_ENABLED` |
+| `HARDCOVER_ENABLED` | `0` (or `false`) | `src/lib/sources/hardcover.ts:67`, passed in at `worker/src/hardcover.ts:22` | Books come from Open Library alone, as before Hardcover. `/v1/features` says `hardcover: false` (`worker/src/shelves.ts:113`). A cover not copied yet answers 404 (`worker/src/covers.ts:90`); copied covers still serve. The Hardcover walk stops. | `npx wrangler secret delete HARDCOVER_ENABLED` |
 | `DAILY_DELTA_CAP` | a lower number, `0` to stop | `worker/src/index.ts:146` | Catalog sync answers 503 (part 3). Website visitors still start from `/catalog/` files. | Delete the secret (default 4,000) |
 | `DAILY_LOOKUP_CAP` | lower, `0` to stop | `worker/src/index.ts:229` | Library imports stop with 503 | Delete (default 300,000) |
 | `DAILY_USER_WRITE_CAP` | lower or higher | `worker/src/me.ts:377`, `worker/src/index.ts:772` | Saving stops for everybody with 503 once reached | Delete (default 40,000) |
@@ -235,7 +252,7 @@ How a cap works (`worker/src/budget.ts:19` and `:52`): any whole number from `0`
 
 | Switch | Read in | What users then see | Turn it back on |
 |---|---|---|---|
-| Delete `BGG_TOKEN` | `worker/src/shelves.ts:47` | Board games are hidden (`/v1/features` false, routes answer 503 `not-configured`) | `node worker/scripts/push-secrets.mjs` (from the repo root; pushes every secret from `.env`, prints names and lengths only) |
+| Delete `BGG_TOKEN` | `worker/src/shelves.ts:47` and `:64` | Already the state today: board games are not live because no token is set (`docs/app.md` line 30). Without it the type is hidden (`/v1/features` false, `worker/src/shelves.ts:113`) and routes answer 503 `not-configured` | `node worker/scripts/push-secrets.mjs` (from the repo root; pushes every secret from `.env`, prints names and lengths only) |
 | Delete `STEAM_API_KEY` | `worker/src/steam.ts:41`, `worker/src/cron.ts:536` | Steam sync answers 503 "Steam sync is not switched on." The Steam tags walk stops. | `node worker/scripts/push-secrets.mjs` |
 
 `HARDCOVER_TOKEN` works the same way, but use `HARDCOVER_ENABLED` instead: it keeps the token in place.
@@ -356,7 +373,7 @@ npx expo prebuild --platform android --no-install
 ./gradlew.bat bundleRelease -PfandexPlay
 ```
 
-Then upload `android/app/build/outputs/bundle/release/app-release.aab` in Play Console. A cold build took 8 min 17 s (2026-10-23), plus Play's review.
+Both run in the short-path copy, not in the repo: `expo prebuild` in `C:\fx\mobile` after copying `mobile/` and `src/` there, `gradlew.bat` in `C:\fx\mobile\android` (`docs/play-store.md` "Building the bundle", `docs/app.md` "Building the APK"; the repo's path is too long for the native build). Then upload `android/app/build/outputs/bundle/release/app-release.aab` in Play Console. A cold build took 8 min 17 s (2026-10-23), plus Play's review.
 
 Most app problems on launch day are API problems. Fix the API, and every installed app is fixed with it.
 
@@ -366,12 +383,13 @@ Most app problems on launch day are API problems. Fix the API, and every install
 
 1. **Is it the API or the website?** Open `https://fandex.org`. If it loads, the files are fine. Then run `curl https://api.fandex.org/v1/health`.
 2. **If the website does not load**, open `https://fandex-web.fandex-worker.workers.dev`. If that works, the domain is the problem, not the build. If neither works, check the last log in `C:\fx\site-logs` and part 5, "The website".
-3. **If health fails with a D1 error**, D1 is probably out of daily reads or writes. Run `npx wrangler d1 insights fandex --timePeriod 1d --sort-type sum --sort-by reads --limit 15 --json` (it works while D1 refuses queries). Nothing brings D1 back before 01:00 except a paid plan. Find the top reader and switch its route down (part 4) so it does not happen again tomorrow.
-4. **If health works but users report errors**, run `npx wrangler tail fandex-api --format json` and look at the status codes: `exceededCpu` means Workers Paid; 503 `budget-exhausted` means a cap (part 3); 429 means a rate limit; 502 means a provider.
-5. **If one provider is failing** (games or books only), switch it off: `IGDB_ENABLED` or `HARDCOVER_ENABLED` to `0` (part 4). The rest keeps working.
-6. **If it started right after a deploy**, roll back the API (part 5), then reset the kept counts.
-7. **If data is wrong or missing**, stop writing first: set `DAILY_USER_WRITE_CAP` to `0`. Then decide on Time Travel (part 5). Do not run SQL by hand that takes titles out of the pool: every device would download its catalog again.
-8. **Write down** the time, what you saw and what you changed. Every switch you set today has to be deleted again.
+3. **If health answers error 1027**, the account is past 100,000 Worker requests today. Nothing brings it back before 01:00. Static pages on fandex.org still load. Post a short note where launch traffic comes from, so people try again tomorrow.
+4. **If health fails with a D1 error**, D1 is out of daily reads or writes (Cloudflare's email says which). Run `npx wrangler d1 insights fandex --time-period 1d --sort-type sum --sort-by reads --limit 15 --json` (it works while D1 refuses queries; use `--sort-by writes` for writes). Nothing brings D1 back before 01:00. Find the top reader or writer and switch its route down (part 4) so it does not happen again tomorrow.
+5. **If health works but users report errors**, run `npx wrangler tail fandex-api --format json` and look at the status codes: `exceededCpu` means the 10 ms limit (part 3, "What breaks first", item 4); 503 `budget-exhausted` means a cap (part 3); 429 means a rate limit; 502 means a provider.
+6. **If one provider is failing** (games or books only), switch it off: `IGDB_ENABLED` or `HARDCOVER_ENABLED` to `0` (part 4). The rest keeps working.
+7. **If it started right after a deploy**, roll back the API (part 5), then reset the kept counts.
+8. **If data is wrong or missing**, stop writing first: set `DAILY_USER_WRITE_CAP` to `0`. Then decide on Time Travel (part 5). Do not run SQL by hand that takes titles out of the pool: every device would download its catalog again.
+9. **Write down** the time, what you saw and what you changed. Every switch you set today has to be deleted again.
 
 ---
 
@@ -379,9 +397,12 @@ Most app problems on launch day are API problems. Fix the API, and every install
 
 Things this runbook could not confirm from the repository:
 
-- **The Cloudflare dashboard paths** (Workers and Pages, D1 Metrics, plan page). The repo documents only one dashboard path (SSL/TLS, Edge Certificates). Check them on Monday.
-- **What the free plan does past 100,000 requests a day.** Not in the docs.
-- **D1's paid allowances**, and whether Workers Paid raises the D1 daily reads and writes. The docs only say Paid lifts CPU to 30 seconds.
+- **The Cloudflare dashboard paths** (Workers and Pages, D1 Metrics, plan page, the account's request count). The repo documents only one dashboard path (SSL/TLS, Edge Certificates). Check them on Monday.
+- **What a request past 100,000 looks like on `api.fandex.org` and `fandex.org`.** Cloudflare's limits page says error 1027, with a fail open or fail closed choice on a *route*. Both Workers are on custom domains, not routes, and no doc says which applies there. The static files should keep serving either way (no `run_worker_first`).
+- **Whether cron runs and service-binding calls count toward the 100,000.** The two crons fire about 1,584 times a day. Every `/v1/*` call on fandex.org runs `fandex-web` and then `fandex-api` through the binding; Cloudflare's pricing page says a binding call is not billed as a second request on the paid plan, and says nothing for the free plan's daily count.
+- **How many requests one app start makes.** Never counted, so the number of daily users the 100,000 allows is unknown. Count it on Monday with `wrangler tail` and one cold start of the app.
+- **A normal day's row writes and requests.** Never measured; only a day's reads (about 290,000, 2026-10-15) is on record.
+- **The cron's daily row writes** (the export, the walks). Not measured, and they come out of the same 100,000.
 - **That `wrangler secret put` is the right way to set a switch.** The repo never does it for a switch; `push-secrets.mjs` uses `wrangler secret bulk`. Confirm on Monday with a harmless one (`DAILY_PAGEVIEW_CAP`), then delete it. Also not measured: how fast a secret reaches every isolate.
 - **That `process.env.IGDB_ENABLED` sees a secret.** `igdb.ts` reads `process.env`, filled from bindings by `nodejs_compat` (comment in `worker/wrangler.jsonc`). `TMDB_API_KEY` is a secret read the same way, so it should hold; it was not tested.
 - **Whether a secret named `DAILY_FETCH_CAP` can override the variable of the same name.** It may be refused as a duplicate binding.
@@ -391,4 +412,47 @@ Things this runbook could not confirm from the repository:
 - **What the app shows on a 503 `budget-exhausted` or a 429.** The API's messages are in the code; how the app displays them was not checked.
 - **Play Console**: where crash and ANR numbers live, staged rollout, and whether a rollout can be halted. Not in the docs. The app was not yet on Play on 2026-11-22 (paused on the account upgrade; trader status due 2027-02-01).
 - **Open Library and BGG rate limits.** Not stated in the repo.
-- **A normal day's request count and row writes.** Never measured; only a day's reads (about 290,000, 2026-10-15) is on record.
+- **`--time-period`.** The help of Wrangler 4.162.0 spells the flag `--time-period`; `docs/worker.md` writes `--timePeriod`. Both are probably accepted (yargs), but only the first was read.
+- **For the record:** `docs/worker.md` still says Workers Paid lifts CPU to 30 seconds. Cloudflare's limits page now says 5 minutes. It does not matter while the plan is Free.
+
+## Checked on 22 Nov 2026
+
+Commands checked with `npx wrangler <cmd> --help` in `worker/` (Wrangler 4.162.0). Nothing was run against the live site or the live database.
+
+| Claim | Where it is proven | Verdict |
+|---|---|---|
+| The account stays on the free plan | Nils's decision, 22 Nov 2026 | Rewritten around it: the "decide on Workers Paid" step, "Go to Workers Paid" and every "What raises it: Workers Paid" are gone |
+| Free plan: 100,000 requests a day, 10 ms CPU, 50 subrequests, 50 D1 queries | `worker/wrangler.jsonc` lines 3 to 7; `docs/worker.md` "Limits"; Cloudflare limits page | Confirmed. The 100,000 is per account (Cloudflare), which the draft did not say |
+| Past 100,000 requests: "not verified" | Cloudflare limits page: error 1027 until midnight UTC | Now known in general; the custom-domain case stays open |
+| D1 5,000,000 reads and 100,000 writes a day, then every query fails | `docs/worker.md` "Limits"; `worker/src/budget.ts:3-7`; Cloudflare D1 changelog 2026-09-01 | Confirmed |
+| Static pages keep serving when the Worker is refused | `mobile/web/wrangler.jsonc` (no `run_worker_first`); `docs/app-plan.md:54` | Confirmed by docs; not seen happen |
+| CPU 1 to 8 ms on reads, up to 19 to 20 ms cold on fetch paths, about fifty requests none terminated | `docs/worker.md` "CPU, measured on the live Worker" | Confirmed |
+| Workers Paid lifts CPU to 30 seconds | Cloudflare limits page: 5 minutes | **Out of date**, and removed with the paid plan |
+| Newest migration `0009_show_seasons_air_date.sql` | `worker/migrations/` | Confirmed |
+| `versions list`, `deployments list`, `d1 migrations list fandex --remote`, `rollback [id] --message --yes`, `secret put/delete <key>`, `tail [worker] --format json`, `d1 time-travel info/restore --timestamp/--bookmark` | `--help` of each | Confirmed |
+| `d1 insights ... --timePeriod 1d` | `--help`: the flag is `--time-period` | **Fixed** to `--time-period` |
+| `/v1/health` returns `ok`, `today` (`fetches`, `userWrites`, `hardcover`, `covers`), `openProviderCircuits` (one isolate's view) | `worker/src/index.ts:343-356` | Confirmed |
+| Nightly export about 01:20 UTC to `fandex-backups/d1/{day}/`, manifest written last | `docs/worker.md` "Backup and restore"; `worker/src/cron.ts:191-194` | Confirmed |
+| Restore drill, `--emit-sql`, output under `data/d1-restore/` | `worker/scripts/restore-drill.mjs:24`, `:101`, `:298` | Confirmed |
+| `rr-2026-10-04.db` must never be deleted | `STATUS.md` line 32; `docs/worker.md` | Confirmed |
+| Time Travel, last 7 days | `docs/worker.md` "Backup and restore" | Confirmed |
+| Nightly site task, 06:30, `C:\fx\site-logs`, `LAST-RUN-FAILED.txt`, newest green commit on main, `wrangler login` in `worker/` | `docs/website.md` "The nightly rebuild" | Confirmed |
+| `fandex-web.fandex-worker.workers.dev` as the second address | `docs/website.md` line 31 | Confirmed |
+| `/dev/users` read 30,597 rows a view | `docs/worker.md` (live D1, 2026-10-11) | Confirmed; "160 views spent a day" was "would spend", fixed |
+| Every cap's default and file:line | `grep` of `worker/src` on 2026-11-22 (list in the caps table) | Confirmed, except `platform_builds` and `baseline_builds`: **lines 163 and 173**, not 162 and 172, fixed |
+| A cap takes any whole number from 0; anything else falls back to the default; a refused kind stays refused in that isolate until the day turns | `worker/src/budget.ts:19-35` and `:52-55` | Confirmed |
+| Every capped call costs one row write | `worker/src/budget.ts:3-7` and `:25-31` | Confirmed; added to the write arithmetic |
+| A counted pageview is three row writes | `worker/src/telemetry.ts:14` and `:26` | Confirmed |
+| `DAILY_FETCH_CAP` set in `worker/wrangler.jsonc` line 60 | `worker/wrangler.jsonc:60` | Confirmed |
+| Rate limits `RL_READ` 120, `RL_RESOLVE` 30, `RL_AUTH` 10, `RL_WRITE` 30 a minute, lines 45 to 52 | `worker/wrangler.jsonc:45-52` | Confirmed |
+| Two cron triggers | `worker/wrangler.jsonc:42` (every ten minutes and every minute) | Confirmed; the draft did not mention them |
+| `IGDB_ENABLED` and `HARDCOVER_ENABLED`: `0` or `false` turns off, default on | `src/lib/sources/igdb.ts:42-45`; `src/lib/sources/hardcover.ts:66-69`; `worker/src/env.ts:63` and `:65` | Confirmed |
+| `HARDCOVER_ENABLED=0` refuses a new cover copy | `worker/src/covers.ts:90` | Confirmed; it answers 404, now said |
+| Deleting `BGG_TOKEN` hides board games | `worker/src/shelves.ts:47`, `:64`, `:113` | Confirmed; it is already the state today, now said |
+| Deleting `STEAM_API_KEY` answers 503 and stops the tags walk | `worker/src/steam.ts:41`; `worker/src/cron.ts:536` | Confirmed |
+| `push-secrets.mjs` uses "the same `secret` commands" | `worker/scripts/push-secrets.mjs:7` (`secret bulk`) | **Wrong**, fixed |
+| Reset of the kept counts after a rollback | `docs/worker.md` lines 319 and 320; `worker/CLAUDE.md` | Confirmed |
+| `publish.mjs --skip-build` republishes the last good build | `docs/website.md` lines 84 and 150 | Confirmed |
+| Play bundle commands | `docs/play-store.md` "Building the bundle" | Confirmed; the draft left out that they run in `C:\fx\mobile`, added |
+| A cold bundle build took 8 min 17 s | `docs/play-store.md` line 20 | Confirmed |
+| Provider quotas: TMDB 50 a second, IGDB 4 a second, Hardcover 5,000 a day, Steam 100,000 a day | `PLATFORMS.md` lines 22, 23, 41 and 111 | Confirmed |

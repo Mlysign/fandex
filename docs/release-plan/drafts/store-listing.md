@@ -50,7 +50,7 @@ Rate your shows. Find your next book. One library for all of it.
 
 ### Full description (max 4,000)
 
-(2,118 characters)
+(2,192 characters)
 <!-- count:en-full -->
 ```text
 Films, shows, games and books in one library. See what comes out next, and how much you'll probably like it before you start.
@@ -62,7 +62,7 @@ Everything you're waiting for, on one calendar.
 Films, shows, games and books share one month view, with release dates for your country. Put a title on your wishlist and your phone reminds you at 9 in the morning on the day it comes out. The same goes for a new season of a show you're caught up on, and for its next episode.
 
 Your taste, in numbers.
-Open a title and Fandex shows how much you'll probably like it, as a guess at the rating you would give it. That number is the Fandex Score. It comes only from your own ratings and from what the title is made of: its genres and the people and studios behind it. What the crowd thinks doesn't count. Tap the question mark next to it to see what pushed it up or down. Insights shows which genres, people and studios you rate high or low.
+Open a title and Fandex shows how much you'll probably like it, as a guess at the rating you would give it. That number is the Fandex Score. It comes only from your own ratings and from what the title is made of: its tags and the people and studios behind it. What the crowd thinks doesn't count. Tap the question mark next to it to see what pushed it up or down. Insights shows which tags, people and studios you rate high or low.
 
 Also in Fandex
 - Sync with Trakt. Ratings, your watchlist and watched episodes stay in step in both directions.
@@ -73,12 +73,20 @@ Also in Fandex
 - Download a copy of your data from Settings, or delete your account there.
 - The same account works in your browser at fandex.org.
 
-Fandex is made by one person. If something is wrong or missing, the Support row in the app reaches me.
+The app itself is in English. Titles show in your country's language where one is known.
+
+Fandex is made by one person. If something is wrong or missing, write to hello@fandex.org.
 
 Notices
 Fandex uses Trakt but is not endorsed or certified by Trakt.
 This product uses the TMDB API but is not endorsed or certified by TMDB.
 Game data comes from IGDB. Book data comes from Open Library and Hardcover.
+```
+
+**Optional line. Use only once Steam connect ships.** It goes under "Also in Fandex". Today a new account cannot connect Steam.
+<!-- count:en-steam -->
+```text
+- Connect Steam to bring in the games you own and your Steam wishlist.
 ```
 
 ---
@@ -127,7 +135,7 @@ Bewerte deine Serien. Finde dein nächstes Buch. Alles in einer Bibliothek.
 
 ### Ausführliche Beschreibung (max. 4.000)
 
-(2.612 Zeichen)
+(2.592 Zeichen)
 <!-- count:de-full -->
 ```text
 Filme, Serien, Spiele und Bücher in einer Bibliothek. Sieh, was als Nächstes erscheint und wie gut es dir wahrscheinlich gefällt, bevor du anfängst.
@@ -139,7 +147,7 @@ Alles, worauf du wartest, in einem Kalender.
 Filme, Serien, Spiele und Bücher stehen in einer Monatsansicht, mit den Erscheinungsterminen für dein Land. Setz einen Titel auf deine Wunschliste, und dein Handy erinnert dich um 9 Uhr morgens an dem Tag, an dem er rauskommt. Das gilt auch für eine neue Staffel einer Serie, bei der du auf dem aktuellen Stand bist, und für ihre nächste Folge.
 
 Dein Geschmack in Zahlen.
-Öffne einen Titel, und Fandex zeigt dir, wie gut er dir wahrscheinlich gefällt. Die Zahl ist eine Schätzung, wie du ihn bewerten würdest, und heißt Fandex Score. Sie kommt nur aus deinen eigenen Wertungen und aus dem, was den Titel ausmacht: seine Genres und die Leute und Studios dahinter. Was alle anderen davon halten, zählt nicht. Tipp auf das Fragezeichen daneben, und du siehst, was die Zahl nach oben oder unten gezogen hat. Unter Insights siehst du, welche Genres, Leute und Studios du hoch oder niedrig bewertest.
+Öffne einen Titel, und Fandex zeigt dir, wie gut er dir wahrscheinlich gefällt. Die Zahl ist eine Schätzung, wie du ihn bewerten würdest, und heißt Fandex Score. Sie kommt nur aus deinen eigenen Wertungen und aus dem, was den Titel ausmacht: seine Tags und die Leute und Studios dahinter. Was alle anderen davon halten, zählt nicht. Tipp auf das Fragezeichen daneben, und du siehst, was die Zahl nach oben oder unten gezogen hat. Unter Insights siehst du, welche Tags, Leute und Studios du hoch oder niedrig bewertest.
 
 Außerdem dabei
 - Sync mit Trakt. Wertungen, deine Watchlist und gesehene Folgen bleiben in beide Richtungen gleich.
@@ -152,7 +160,7 @@ Außerdem dabei
 
 Die App selbst ist auf Englisch. Titel zeigt sie, wo bekannt, in der Sprache deines Landes.
 
-Fandex macht eine einzelne Person. Wenn etwas falsch ist oder fehlt, erreichst du mich über „Support“ in der App.
+Fandex macht eine einzelne Person. Wenn etwas falsch ist oder fehlt, schreib an hello@fandex.org.
 
 Hinweise
 Fandex nutzt Trakt, wird aber von Trakt weder unterstützt noch zertifiziert.
@@ -160,45 +168,60 @@ Dieses Produkt nutzt die TMDB-API, wird aber von TMDB weder unterstützt noch ze
 Spieldaten stammen von IGDB. Buchdaten stammen von Open Library und Hardcover.
 ```
 
+**Optionale Zeile. Erst verwenden, wenn die Steam-Verbindung live ist.** Sie kommt unter „Außerdem dabei“. Heute kann ein neues Konto Steam nicht verbinden.
+<!-- count:de-steam -->
+```text
+- Verbinde Steam und hol dir deine Spiele und deine Steam-Wunschliste.
+```
+
 ---
 
-## Every claim and where it comes from
-
-| Claim in the description | Backed by |
-|---|---|
-| Films, shows, games and books in one library | `docs/app.md`, "What is built" (Home, Search, Wishlist rows; the books paragraph under the table). Board games left out: off until a BGG token exists (same paragraph, `STATUS.md`). |
-| Rate from 1 to 10 | `docs/app.md`, Item page row: "rate it 1 to 10" |
-| Your shows help pick your next book (ratings count across media) | `docs/release-plan/index.html`, `#strategy`, Message 1 "Why it is true": 99% of what scores an unrated book comes from films, shows and games. The score profile is built from every title you rated: `docs/app.md`, "The Fandex Score is computed on the device" |
-| Home suggests titles not in your library, mixed across your types | `docs/app.md`, Home row: Recommended, "every title not in your library", `balanceByType` gives each type an even share |
-| One month view for all four types | `docs/app.md`, Calendar row; books in the calendar's months: the books paragraph |
-| Release dates for your country | `docs/app.md`, Calendar row ("placed by the day they open in your country", `lib/regionalDates.ts`) and Item page row |
-| Reminder at 9 in the morning on release day for a wishlisted title | `docs/app.md`, Release reminders row ("09:00 on the day a wishlisted title (any type) comes out in your country") |
-| Same for a new season of a show you're caught up on, and its next episode | `docs/app.md`, Release reminders row |
-| A guess at the rating you would give | `STATUS.md`, H5 row: "what you would probably rate it, times ten"; `docs/app.md`, Item page row ("read as what you would rate it") |
-| The score comes only from your ratings and what the title is made of (genres, people, studios); the crowd doesn't count | `PLATFORMS.md` §1, line under the heading: the score reads only facets (tags, people, companies, franchise) and is forbidden by test from reading ratings or popularity. `docs/release-plan/index.html`, Message 3 proof: "Only your own ratings count" |
-| The question mark shows what pushed the number up or down | `docs/app.md`, Item page row: "The seal's ? opens the Why sheet: a ring of what moved the number" |
-| Insights shows which genres, people and studios you rate high or low | `docs/app.md`, Insights row ("how you rate tags, people and studios") |
-| Sync with Trakt, both directions, ratings, watchlist, episodes | `docs/app.md`, "Trakt syncs from the device" and "A write goes to Trakt, then the Worker"; `PLATFORMS.md` §2, Trakt row (wishlist R/W, rating R/W, episodes R/W) |
-| Import from Letterboxd or IMDb export files | `docs/app-parity.md`, Import row ("Letterboxd and IMDb, read on the device"); `PLATFORMS.md` §3 |
-| Tick episodes with or without Trakt | `docs/app.md`, "Without Trakt on the device, episodes are Fandex's own" (since 0.3.40) |
-| Up next widget, tick without opening the app | `docs/app.md`, Home-screen widget row, and the widget section ("opens nothing") |
-| Search and your lists work without a connection | `docs/app-parity.md`, "What the app has that the site did not": "Search, Wishlist, Library and Progress work offline"; `docs/play-store.md` line 4 ("the catalog offline") |
-| Download your data, delete your account, in Settings | `docs/app.md`, Settings row ("download, sign out everywhere and delete"), route `/v1/me/export` |
-| Same account in the browser at fandex.org | `STATUS.md`, first row; `docs/app.md` ("runs as an Android app and, from the same code, in a browser") |
-| Made by one person | `docs/play-store.md`, "The business behind it": an Einzelunternehmen. Also the "I built this" line in the release plan's words to use |
-| Support row in the app | `docs/app.md`, You row ("rows to Insights, Import, Settings and Support"); `docs/app-parity.md`, Profile row |
-| (DE only) The app is in English; titles in your country's language | No German UI strings in `mobile/src` (grep for "Einstellungen", "Wunschliste": none). Titles: `docs/app.md`, Search row ("titled in the country's language", 0.3.60) |
-| Notices: Trakt, TMDB | Required by the brief and `docs/release-plan/plan-data.js` item `ad-notices` ("Trakt's line goes in About and in the store description"); `index.html` finding `f-3` |
-| Game data from IGDB, book data from Open Library and Hardcover | `PLATFORMS.md` §1 (IGDB is the only games provider; Open Library and Hardcover the book sources); `docs/app.md`, books paragraph (a book page credits Open Library and Hardcover) |
+## Notes for Nils
 
 ### Things I was not sure about
 
-1. **Steam is not in the description, though the brief asked for it.** `docs/app.md` ("Steam syncs from the device too"): only accounts carried over from the old site have Steam connected, and "there is no Steam sign-in in the app". `PLATFORMS.md` §2 says the same. A stranger installing from Play cannot connect Steam, so "syncs with Steam" would be false for every new user. When a Steam connect ships, add this line to "Also in Fandex": `- Bring in your Steam library and wishlist.` and to the notices: `Steam is a trademark of Valve Corporation.` (my suggestion, not from PLATFORMS.md, which only asks for Valve's name and logo on pages that use the API).
+1. **Steam is out of the main text.** Only accounts carried over from the old site have Steam connected, and the app has no way to connect it (`docs/app.md` lines 108 and 109; `PLATFORMS.md` §2, Steam row; Settings offers Connect for Trakt, Google and Discord only, `mobile/src/app/(tabs)/settings.tsx:384`). The optional line under each description is for the day a Steam connect ships. A notice such as "Steam is a trademark of Valve Corporation" may be wanted then; `PLATFORMS.md` asks only for Valve's name and logo on pages that use the API.
 2. **Message 1 is not visible in the app yet.** `index.html` Message 1, "Problem": "The app does not show this anywhere yet." The score does use films, shows and games to score a book (the 99% figure), so the sentence is true, but a stranger can't see it happen. I kept it because the effect is real; it is the softest claim here.
-3. **Choosing an import file on Android.** `docs/app-parity.md` (2026-10-15) says it "needs the next APK". Many APKs have shipped since, so I assume it works on the phone, but I found no line saying it was tried there.
+3. **Choosing an import file on Android: built, never seen on a phone.** The import screen's "Choose your export" button calls `pickFiles` (`mobile/src/app/(tabs)/import.tsx:180`), which on Android opens the system file picker for a ZIP or CSV (`mobile/src/lib/files.ts:16-19`, expo-document-picker, added 2026-10-15 in commit e4b0a72). Every APK since then carries it (0.3.63 is current). No doc records it being tried on the phone; the only run end to end was on the local stack in a browser (`docs/app-parity.md` line 48). Try it once on the Pixel before the listing goes up.
 4. **What the data download contains.** I only know it exists (`/v1/me/export`). I wrote "a copy of your data", not "everything".
 5. **Offline.** The doc lists Search, Wishlist, Library and Progress as offline. Rating, the calendar and the score's Why sheet are not listed, so the text says "search and your lists" only.
 6. **Other provider notices.** `PLATFORMS.md` asks for nothing in a store description beyond Trakt and TMDB. Steam's Valve name and logo, Open Library's credit and BGG's "Powered by BGG" are for pages in the app. IGDB's terms (via Twitch) are not covered in `PLATFORMS.md`; the plain credit line is a precaution, not a known requirement. Check IGDB/Twitch's attribution terms before launch.
 7. **The German notices are translations.** Trakt and TMDB give their lines in English. If either wants the exact English wording everywhere, swap the English lines into the German listing.
 8. **"Free" is nowhere.** Play shows the price itself, and ads are planned, so the text says nothing about money in either direction.
 9. **Sign-in methods are not listed.** Google sign-in on the phone has "not yet [been] pressed on a phone" (`STATUS.md`, Expo app row), so I left out "sign in with Trakt, Google or Discord".
+10. **Offline is only as true as the docs.** `docs/app-parity.md` lines 132 and 133 say Search, Wishlist, Library and Progress work offline. Not tried for this check.
+
+## Checked on 22 Nov 2026
+
+Every claim in both descriptions and the short texts, checked against the code and the docs. Wrong ones are fixed above.
+
+| Claim | Where it is proven | Verdict |
+|---|---|---|
+| Films, shows, games and books in one library (board games left out) | `docs/app.md` lines 14 to 28; board games off until a BGG token exists, line 30 | Confirmed |
+| Rate from 1 to 10 | `docs/app.md` line 18 ("rate it 1 to 10"); the star row is ten cells, `mobile/src/components/feel.tsx:62` | Confirmed |
+| Your shows help pick your next book | `docs/release-plan/index.html` Message 1 (99% of an unrated book's score from other media) | Confirmed by the plan's measurement; not visible in the app |
+| Home suggests titles not in your library, mixed across your types | `docs/app.md` line 14 (`recommend`, `balanceByType`) | Confirmed |
+| One month view for all four types | `docs/app.md` lines 17 and 28 to 30 (books in the calendar's months) | Confirmed |
+| Release dates for your country | `docs/app.md` lines 17 and 25 (`lib/regionalDates.ts`) | Confirmed |
+| Reminder at 9 in the morning on release day | `mobile/src/lib/releaseReminders.ts:29` (`REMINDER_HOUR = 9`); `docs/app.md` line 25 | Confirmed |
+| Same for a new season of a show you're caught up on, and its next episode | `mobile/src/app/(tabs)/settings.tsx:859-875` (three switches); `docs/app.md` line 25 | Confirmed |
+| The score is a guess at the rating you would give | `STATUS.md` H5 row; `docs/app.md` line 18 | Confirmed |
+| The score comes only from your ratings and what the title is made of; the crowd doesn't count | `docs/fandex-score.md` lines 17, 288 and 357 (no crowd rating, no popularity) | Confirmed |
+| ...made of its **genres** | `src/lib/scoringDefaults.ts:115`: the genre category weighs 0 | **Wrong**, now "its tags" |
+| Insights shows which **genres**, people and studios you rate | `docs/app.md` line 20 ("how you rate tags, people and studios") | **Wrong**, now "tags" |
+| The question mark shows what pushed the number up or down | `docs/app.md` line 18 (`ScoreSeal.tsx`, the Why sheet's ring) | Confirmed |
+| Trakt sync both ways: ratings, watchlist, episodes | `PLATFORMS.md` line 53 (Trakt R/W); `docs/app.md`, "How it is put together" | Confirmed |
+| Import ratings and watchlist from a Letterboxd or IMDb export | `mobile/src/app/(tabs)/import.tsx:136` and `:180`; `mobile/src/lib/files.ts:16-19` | Confirmed in code; never tried on a phone |
+| Tick episodes with or without Trakt | `STATUS.md`, Expo app row (0.3.40) | Confirmed |
+| Up next widget, tick without opening the app | `docs/app.md` line 26 | Confirmed |
+| Library and catalog on the phone; search and lists work offline | `docs/app-parity.md` lines 132 and 133 | Confirmed by the docs; not tried |
+| Download your data and delete your account in Settings | `mobile/src/app/(tabs)/settings.tsx:753` (Download) and `:762` (Delete) | Confirmed |
+| Same account in the browser at fandex.org | `docs/app.md` lines 9 and 10; `STATUS.md` first row | Confirmed |
+| The app is in English; titles in your country's language | no i18n library in `mobile/src`; `docs/app.md` line 15 (0.3.60) | Confirmed. The line is now in the English text too |
+| Made by one person | `docs/play-store.md` line 14 (Einzelunternehmen) | Confirmed |
+| "The Support row in the app reaches me" | `mobile/src/app/(tabs)/profile.tsx:94`: the row is "Support Fandex, Help cover the running costs", a donation link. Contact is `hello@fandex.org` (`src/lib/legal/content/en/support.ts:14`), linked as "Contact" on the You tab (`mobile/src/components/LegalLinks.tsx:17`) | **Wrong**, now "write to hello@fandex.org" |
+| Trakt and TMDB notices | `docs/release-plan/plan-data.js` item `ad-notices` | Confirmed as required wording |
+| Game data from IGDB, books from Open Library and Hardcover | `PLATFORMS.md` lines 23 and 39; `docs/app.md` lines 34 to 43 | Confirmed |
+| Steam (optional line only) | `docs/app.md` lines 108 and 109; `PLATFORMS.md` line 56 | Not live for new users; kept out of the main text |
+| Character counts: titles 22 to 29, short texts 64 to 79, full texts 2,192 and 2,592 | counted with `node` on 22 Nov 2026, line breaks included | Under every limit |
+| No "best", "#1", "free" or price | the same script | Confirmed |

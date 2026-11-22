@@ -1,0 +1,372 @@
+<style>
+/* Mockups of five small additions. App colours copied from mobile/src/theme.ts. */
+.am-item{
+  --am-bg:#100E0C;--am-el:#181512;--am-ov:#201C18;--am-in:#0B0A08;
+  --am-bd:rgba(237,231,220,.09);--am-bd2:rgba(237,231,220,.14);
+  --am-tx:#EDE7DC;--am-tx2:#9A8F80;--am-mut:#6F665A;
+  --am-acc:#C8A24B;--am-acc-s:rgba(200,162,75,.14);--am-danger:#E5674C;
+  /* What other companies draw: Android's sheets, Google Play, TMDB's logo. */
+  --am-g-bg:#202124;--am-g-el:#303134;--am-g-tx:#E8EAED;--am-g-tx2:#9AA0A6;--am-g-acc:#8AB4F8;
+  --am-gp-bg:#000;--am-gp-bd:#A6A6A6;--am-gp-1:#4285F4;--am-gp-2:#34A853;--am-gp-3:#FBBC04;--am-gp-4:#EA4335;
+  --am-tmdb-1:#90CEA1;--am-tmdb-2:#01B4E4;
+  margin-top:14px;
+}
+.am-item>h3{margin-bottom:6px}
+.am-figs{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;margin:14px 0 6px}
+.am-fig{margin:0;width:260px;flex:none}
+.am-fig .cap2{line-height:1.4}
+.am-side{flex:1 1 220px;min-width:200px;max-width:340px;padding-top:6px}
+.am-q{font:600 14.5px/1.3 var(--sans);color:var(--tx);margin:12px 0 8px}
+
+/* the phone */
+.am-ph{position:relative;width:260px;height:546px;border:7px solid var(--hi);border-radius:30px;overflow:hidden;background:var(--am-bg);color:var(--am-tx);font-family:var(--sans);box-shadow:0 12px 30px rgba(0,0,0,.45)}
+.am-shot{position:absolute;inset:0;background:url("img/title.jpg") top/246px auto no-repeat}
+.am-shot.home{background-image:url("img/home.jpg")}
+.am-dim{position:absolute;inset:0;background:rgba(0,0,0,.6)}
+.am-sb{height:16px;display:flex;justify-content:space-between;align-items:center;padding:0 14px;font:400 8px var(--mono);color:var(--am-tx2)}
+.am-sb i{width:14px;height:6px;border:1px solid var(--am-tx2);border-radius:2px}
+.am-i{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.am-nav{position:absolute;left:0;right:0;bottom:0;height:34px;display:flex;justify-content:space-around;align-items:center;background:var(--am-bg);border-top:1px solid var(--am-bd)}
+.am-nav span{display:flex;flex-direction:column;align-items:center;gap:2px;font:400 6px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--am-tx2)}
+.am-nav .on{color:var(--am-acc)}
+.am-new{outline:2px solid var(--gold);outline-offset:2px;border-radius:8px}
+.am-tag{font:400 7px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--am-bg);background:var(--gold);border-radius:3px;padding:1px 4px;margin-left:5px;vertical-align:1px}
+
+/* the You page */
+.am-pg{padding:10px 14px 0;display:flex;flex-direction:column;gap:12px}
+.am-who{display:flex;align-items:center;gap:9px}
+.am-av{width:36px;height:36px;border-radius:50%;background:var(--am-ov);border:1px solid var(--am-bd);display:flex;align-items:center;justify-content:center;color:var(--am-mut);flex:none}
+.am-who b{display:block;font:400 19px/1 var(--serif)}
+.am-who small{display:block;font:400 7.5px var(--mono);color:var(--am-tx2);margin-top:3px}
+.am-gear{margin-left:auto;width:26px;height:26px;border-radius:10px;background:var(--am-el);border:1px solid var(--am-bd);display:flex;align-items:center;justify-content:center;color:var(--am-tx2)}
+.am-stats{display:flex;background:var(--am-el);border:1px solid var(--am-bd);border-radius:11px}
+.am-stats div{flex:1;text-align:center;padding:6px 0}
+.am-stats div+div{border-left:1px solid var(--am-bd)}
+.am-stats b{display:block;font:400 16px/1.1 var(--serif)}
+.am-stats small{font:400 7px var(--mono);color:var(--am-tx2)}
+.am-ent{border-top:1px solid var(--am-bd);border-bottom:1px solid var(--am-bd)}
+.am-row{display:flex;align-items:center;gap:8px;padding:7px 2px}
+.am-row+.am-row{border-top:1px solid var(--am-bd)}
+.am-ic{width:24px;height:24px;border-radius:8px;background:var(--am-el);border:1px solid var(--am-bd);display:flex;align-items:center;justify-content:center;color:var(--am-tx2);flex:none}
+.am-row div{flex:1;min-width:0}
+.am-row b{display:block;font:600 8.5px/1.2 var(--sans)}
+.am-row small{display:block;font:400 7.5px/1.3 var(--sans);color:var(--am-tx2);margin-top:1px}
+.am-row>.am-i{color:var(--am-tx2);width:10px;height:10px}
+.am-btn{display:flex;align-items:center;justify-content:center;height:26px;border-radius:8px;background:var(--am-el);border:1px solid var(--am-bd2);font:600 8.5px var(--sans);color:var(--am-tx)}
+.am-btn.sm{display:inline-flex;height:20px;padding:0 8px;border-radius:5px;font-size:7.5px;flex:none}
+.am-foot{border-top:1px solid var(--am-bd);padding-top:9px;display:flex;flex-direction:column;gap:7px}
+.am-legal{display:flex;gap:11px;font:400 7.5px var(--mono);color:var(--am-tx2)}
+.am-nt{display:flex;gap:7px;align-items:flex-start;font:400 7.5px/1.4 var(--sans);color:var(--am-tx2)}
+.am-nt>span:first-child{flex:none;width:44px;display:flex;justify-content:center;padding-top:1px}
+.am-tmdb{display:inline-flex;align-items:center;gap:2px}
+.am-tmdb b{font:600 9px/1 var(--sans);letter-spacing:.04em;background:linear-gradient(90deg,var(--am-tmdb-1),var(--am-tmdb-2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.am-tmdb i{width:18px;height:6px;border-radius:3px;background:linear-gradient(90deg,var(--am-tmdb-1),var(--am-tmdb-2))}
+.am-trakt{width:13px;height:13px;color:var(--am-tx)}
+
+/* Settings */
+.am-h1{font:400 22px/1 var(--serif)}
+.am-eb{font:400 7px var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--am-acc)}
+.am-hint{font:400 7.5px/1.35 var(--sans);color:var(--am-tx2);margin-top:2px}
+.am-card{background:var(--am-el);border:1px solid var(--am-bd);border-radius:9px;padding:8px 9px;display:flex;flex-direction:column;gap:6px}
+.am-card.row{flex-direction:row;align-items:center;gap:8px}
+.am-card.row>div{flex:1;min-width:0}
+.am-card b{display:block;font:600 8.5px/1.2 var(--sans)}
+.am-card small{display:block;font:400 7.5px/1.35 var(--sans);color:var(--am-tx2)}
+.am-sw{width:20px;height:11px;border-radius:6px;background:var(--am-acc);position:relative;flex:none}
+.am-sw::after{content:"";position:absolute;right:1px;top:1px;width:9px;height:9px;border-radius:50%;background:var(--am-tx)}
+.am-sec{display:flex;flex-direction:column;gap:6px}
+
+/* a mail app */
+.am-mail{background:var(--am-g-bg);position:absolute;inset:0;color:var(--am-g-tx)}
+.am-mbar{display:flex;align-items:center;gap:10px;padding:8px 12px;font:400 11px var(--sans)}
+.am-mbar span{flex:1}
+.am-mf{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--am-g-el);font:400 9px/1.3 var(--sans)}
+.am-mf small{color:var(--am-g-tx2);width:38px;flex:none;font-size:9px}
+.am-chip{background:var(--am-g-el);border-radius:10px;padding:2px 7px}
+.am-mbody{padding:10px 12px;font:400 9px var(--sans);color:var(--am-g-tx2)}
+.am-caret{display:inline-block;width:1px;height:10px;background:var(--am-g-acc);vertical-align:-2px;margin-right:2px}
+
+/* Android's share sheet and Google's review sheet */
+.am-sheet{position:absolute;left:0;right:0;bottom:0;background:var(--am-g-bg);color:var(--am-g-tx);border-radius:16px 16px 0 0;padding:8px 12px 14px;font-family:var(--sans)}
+.am-grab{width:28px;height:3px;border-radius:2px;background:var(--am-g-tx2);margin:0 auto 10px;opacity:.6}
+.am-prev{display:flex;gap:8px;align-items:center;background:var(--am-g-el);border-radius:10px;padding:7px}
+.am-prev img{width:30px;height:30px;border-radius:6px;object-fit:cover;object-position:center 30%}
+.am-prev div{flex:1;min-width:0}
+.am-prev b{display:block;font:600 9px var(--sans)}
+.am-prev small{display:block;font:400 8px var(--sans);color:var(--am-g-tx2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.am-tg{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 4px;margin-top:12px;text-align:center;font:400 7.5px var(--sans);color:var(--am-g-tx2)}
+.am-tg span::before{content:"";display:block;width:30px;height:30px;border-radius:50%;background:var(--am-g-el);margin:0 auto 4px}
+.am-app{display:flex;gap:9px;align-items:center}
+.am-appic{width:34px;height:34px;border-radius:8px;background:var(--am-acc);color:var(--am-bg);font:400 24px/34px var(--serif);text-align:center;flex:none}
+.am-app b{display:block;font:600 10.5px var(--sans)}
+.am-app small{display:block;font:400 8px var(--sans);color:var(--am-g-tx2)}
+.am-stars{display:flex;justify-content:center;gap:10px;margin:12px 0 8px;color:var(--am-g-tx2)}
+.am-stars .am-i{width:22px;height:22px;stroke-width:1.5}
+.am-stars .on{color:var(--am-g-acc);fill:var(--am-g-acc)}
+.am-field{border:1px solid var(--am-g-tx2);border-radius:6px;padding:7px 8px;font:400 8.5px var(--sans);color:var(--am-g-tx2)}
+.am-gnote{font:400 7.5px/1.4 var(--sans);color:var(--am-g-tx2);margin:7px 0 9px}
+.am-gbtns{display:flex;justify-content:flex-end;gap:14px;font:600 9px var(--sans);color:var(--am-g-acc);align-items:center}
+.am-gbtns b{background:var(--am-g-acc);color:var(--am-g-bg);border-radius:12px;padding:5px 11px}
+
+/* the website at phone size */
+.am-url{height:24px;background:var(--am-in);display:flex;align-items:center;padding:0 8px}
+.am-url span{flex:1;background:var(--am-ov);border-radius:10px;height:16px;display:flex;align-items:center;gap:4px;padding:0 8px;font:400 8px var(--sans);color:var(--am-tx2)}
+.am-sl{background:url("img/home.jpg") no-repeat;background-size:246px auto}
+.am-gpcard{margin:6px 14px 8px;background:var(--am-el);border:1px solid var(--am-bd2);border-radius:9px;padding:9px 10px;display:flex;align-items:center;gap:9px}
+.am-gpcard div{flex:1;min-width:0}
+.am-gpcard b{display:block;font:400 13px/1.1 var(--serif)}
+.am-gpcard small{display:block;font:400 7.5px/1.3 var(--sans);color:var(--am-tx2);margin-top:2px}
+.am-bar{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--am-el);border-bottom:1px solid var(--am-bd2);font:600 8.5px var(--sans)}
+.am-bar span{flex:1}
+.am-gp{display:inline-flex;align-items:center;gap:4px;background:var(--am-gp-bg);border:1px solid var(--am-gp-bd);border-radius:5px;padding:3px 7px 3px 5px;color:#fff;flex:none}
+.am-gp svg{width:12px;height:13px}
+.am-gp span{display:flex;flex-direction:column;line-height:1}
+.am-gp small{font:400 5px var(--sans);letter-spacing:.04em}
+.am-gp b{font:600 9.5px var(--sans)}
+.am-gp.sm{padding:2px 5px 2px 4px}.am-gp.sm b{font-size:8px}.am-gp.sm svg{width:10px;height:11px}
+</style>
+
+<!-- 1. Send feedback -->
+<div class="card am-item" data-cid="mk-feedback" data-label="Mockup: Send feedback row">
+  <h3>Send feedback</h3>
+  <p class="ctx">A row that opens your phone's mail app with a mail to hello@fandex.org, the app version already in the subject.</p>
+  <div class="am-figs">
+    <figure class="am-fig">
+      <div class="am-ph">
+        <div class="am-sb">9:41<i></i></div>
+        <div class="am-pg">
+          <div class="am-who">
+            <span class="am-av"><svg class="am-i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg></span>
+            <span><b>Nils</b><small>@nils · joined 2026</small></span>
+            <span class="am-gear"><svg class="am-i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></span>
+          </div>
+          <div class="am-stats"><div><b>1,284</b><small>tracked</small></div><div><b>913</b><small>rated</small></div><div><b>142</b><small>wishlist</small></div></div>
+          <div class="am-ent">
+            <div class="am-row"><span class="am-ic"><svg class="am-i" viewBox="0 0 24 24"><path d="M22 7 13.5 15.5 8.5 10.5 2 17"/><path d="M16 7h6v6"/></svg></span><div><b>Insights</b><small>Your taste in numbers</small></div><svg class="am-i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></div>
+            <div class="am-row"><span class="am-ic"><svg class="am-i" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg></span><div><b>Import</b><small>A Letterboxd or IMDb export into your library</small></div><svg class="am-i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></div>
+            <div class="am-row"><span class="am-ic"><svg class="am-i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></span><div><b>Settings</b><small>Account, sync, privacy</small></div><svg class="am-i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></div>
+            <div class="am-row am-new"><span class="am-ic"><svg class="am-i" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg></span><div><b>Send feedback<span class="am-tag">new</span></b><small>A bug, an idea, anything. Opens your mail app</small></div><svg class="am-i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></div>
+          </div>
+          <span class="am-btn">Sign out</span>
+          <div class="am-foot"><div class="am-legal"><span>Privacy</span><span>Terms</span><span>Contact</span><span>Imprint</span></div></div>
+        </div>
+        <div class="am-nav">
+          <span><svg class="am-i" viewBox="0 0 24 24"><path d="M3 10 12 3l9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>Home</span>
+          <span><svg class="am-i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Search</span>
+          <span><svg class="am-i" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Calendar</span>
+          <span><svg class="am-i" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>Wishlist</span>
+          <span class="on"><svg class="am-i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>You</span>
+        </div>
+      </div>
+      <figcaption class="cap2">The You page, with the new row</figcaption>
+    </figure>
+    <figure class="am-fig">
+      <div class="am-ph">
+        <div class="am-mail">
+          <div class="am-sb">9:41<i></i></div>
+          <div class="am-mbar">
+            <svg class="am-i" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg><span>Compose</span>
+            <svg class="am-i" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>
+          </div>
+          <div class="am-mf"><small>From</small>your own address</div>
+          <div class="am-mf"><small>To</small><span class="am-chip">hello@fandex.org</span></div>
+          <div class="am-mf"><small>Subject</small>Fandex feedback (app 0.3.63)</div>
+          <div class="am-mbody"><span class="am-caret"></span>Compose email</div>
+        </div>
+      </div>
+      <figcaption class="cap2">After a tap: the phone's own mail app</figcaption>
+    </figure>
+  </div>
+  <p class="am-q">Build it like this?</p>
+  <ul class="optl">
+    <li class="rec"><b>A.</b> A row on the You page, under Settings. One tap from the You tab. <em>My pick</em></li>
+    <li><b>B.</b> A row in a new "About" part at the bottom of Settings, beside the version and the provider notices (drawn under Provider notices). Two taps away.</li>
+  </ul>
+  <p class="ctx">The app has no About part today. Signed out, the You page shows only the sign-in and the four legal links, and Contact already reaches you from there.</p>
+</div>
+
+<!-- 2. Share a title -->
+<div class="card am-item" data-cid="mk-share" data-label="Mockup: Share a title">
+  <h3>Share a title</h3>
+  <p class="ctx">A button on a title's page that opens Android's share sheet with the title's fandex.org link.</p>
+  <div class="am-figs">
+    <figure class="am-fig">
+      <div class="am-ph">
+        <div class="am-shot"></div>
+        <span class="am-new" style="position:absolute;right:9px;top:7px;width:22px;height:22px;border-radius:50%;background:rgba(16,14,12,.86);display:flex;align-items:center;justify-content:center;color:var(--am-tx)"><svg class="am-i" viewBox="0 0 24 24" style="width:10px;height:10px"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg></span>
+      </div>
+      <figcaption class="cap2">The title page. The round button top right</figcaption>
+    </figure>
+    <figure class="am-fig">
+      <div class="am-ph">
+        <div class="am-shot"></div><div class="am-dim"></div>
+        <div class="am-sheet">
+          <div class="am-grab"></div>
+          <div class="am-prev">
+            <img src="img/title.jpg" alt="">
+            <div><b>Severance</b><small>https://fandex.org/show/severance</small></div>
+            <svg class="am-i" viewBox="0 0 24 24" style="color:var(--am-g-tx2)"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16V4h12"/></svg>
+          </div>
+          <div class="am-tg"><span>Messages</span><span>Mail</span><span>Chat app</span><span>Nearby</span><span>Notes</span><span>Drive</span><span>Copy</span><span>More</span></div>
+        </div>
+      </div>
+      <figcaption class="cap2">After a tap: Android's share sheet</figcaption>
+    </figure>
+  </div>
+  <p class="ctx"><b style="color:var(--tx)">This one is already built.</b> The app's title page has had the share button beside Back since the item page port. The capture is from fandex.org, which has no button (a browser has its own share), so I drew it in where the app puts it.</p>
+  <p class="am-q">Keep it like this?</p>
+  <ul class="optl">
+    <li class="rec"><b>A.</b> Keep the round button top right. Nothing to build. <em>My pick</em></li>
+    <li><b>B.</b> Also put a "Share" button in the row with Rate and Save, where people look for actions. Small job.</li>
+  </ul>
+</div>
+
+<!-- 3. Provider notices -->
+<div class="card am-item" data-cid="mk-notices" data-label="Mockup: Provider notices">
+  <h3>Provider notices</h3>
+  <p class="ctx">Two short lines saying Fandex uses TMDB and Trakt data but is not endorsed by either, which their terms ask for.</p>
+  <div class="am-figs">
+    <figure class="am-fig">
+      <div class="am-ph">
+        <div class="am-sb">9:41<i></i></div>
+        <div class="am-pg">
+          <div class="am-stats"><div><b>1,284</b><small>tracked</small></div><div><b>913</b><small>rated</small></div><div><b>142</b><small>wishlist</small></div></div>
+          <div class="am-ent">
+            <div class="am-row"><span class="am-ic"><svg class="am-i" viewBox="0 0 24 24"><path d="M22 7 13.5 15.5 8.5 10.5 2 17"/><path d="M16 7h6v6"/></svg></span><div><b>Insights</b><small>Your taste in numbers</small></div><svg class="am-i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></div>
+            <div class="am-row"><span class="am-ic"><svg class="am-i" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg></span><div><b>Import</b><small>A Letterboxd or IMDb export into your library</small></div><svg class="am-i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></div>
+            <div class="am-row"><span class="am-ic"><svg class="am-i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></span><div><b>Settings</b><small>Account, sync, privacy</small></div><svg class="am-i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></div>
+          </div>
+          <span class="am-btn">Sign out</span>
+          <div class="am-foot">
+            <div class="am-new" style="display:flex;flex-direction:column;gap:7px;padding:4px 4px">
+              <div class="am-nt"><span><span class="am-tmdb"><b>TMDB</b><i></i></span></span><span>This product uses the TMDB API but is not endorsed or certified by TMDB.</span></div>
+              <div class="am-nt"><span><svg class="am-i am-trakt" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M7 12.5l3 3 7-7"/></svg></span><span>Fandex uses Trakt but is not endorsed or certified by Trakt.</span></div>
+            </div>
+            <div class="am-legal"><span>Privacy</span><span>Terms</span><span>Contact</span><span>Imprint</span></div>
+          </div>
+        </div>
+        <div class="am-nav">
+          <span><svg class="am-i" viewBox="0 0 24 24"><path d="M3 10 12 3l9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>Home</span>
+          <span><svg class="am-i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Search</span>
+          <span><svg class="am-i" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Calendar</span>
+          <span><svg class="am-i" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>Wishlist</span>
+          <span class="on"><svg class="am-i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>You</span>
+        </div>
+      </div>
+      <figcaption class="cap2">A. Bottom of the You page</figcaption>
+    </figure>
+    <figure class="am-fig">
+      <div class="am-ph">
+        <div class="am-sb">9:41<i></i></div>
+        <div class="am-pg" style="gap:11px">
+          <div class="am-sec">
+            <div><div class="am-eb">Notifications</div><div class="am-hint">On the day itself, in the morning.</div></div>
+            <div class="am-card row"><div><b>Releases</b><small>When something on your wishlist comes out.</small></div><span class="am-sw"></span></div>
+            <div class="am-card row"><div><b>New episodes</b><small>When a new episode comes out of a show you are caught up on.</small></div><span class="am-sw"></span></div>
+          </div>
+          <div class="am-sec am-new">
+            <div><div class="am-eb">About<span class="am-tag">new</span></div></div>
+            <div class="am-card row"><div><b>Version</b><small>0.3.63</small></div></div>
+            <div class="am-card row"><div><b>Send feedback</b><small>Opens your mail app.</small></div><span class="am-btn sm">Write</span></div>
+            <div class="am-card">
+              <div class="am-nt"><span><span class="am-tmdb"><b>TMDB</b><i></i></span></span><span>This product uses the TMDB API but is not endorsed or certified by TMDB.</span></div>
+              <div class="am-nt"><span><svg class="am-i am-trakt" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M7 12.5l3 3 7-7"/></svg></span><span>Fandex uses Trakt but is not endorsed or certified by Trakt.</span></div>
+            </div>
+          </div>
+          <div class="am-legal"><span>Privacy</span><span>Terms</span><span>Contact</span><span>Imprint</span></div>
+        </div>
+        <div class="am-nav">
+          <span><svg class="am-i" viewBox="0 0 24 24"><path d="M3 10 12 3l9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>Home</span>
+          <span><svg class="am-i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Search</span>
+          <span><svg class="am-i" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Calendar</span>
+          <span><svg class="am-i" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>Wishlist</span>
+          <span class="on"><svg class="am-i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>You</span>
+        </div>
+      </div>
+      <figcaption class="cap2">B. A new About part at the end of Settings</figcaption>
+    </figure>
+  </div>
+  <p class="am-q">Build it like this?</p>
+  <ul class="optl">
+    <li class="rec"><b>A.</b> At the bottom of the You page, above the legal links. Seen signed in and signed out. <em>My pick</em></li>
+    <li><b>B.</b> In a new About part at the end of Settings, with the version and Send feedback. Only signed-in people can open Settings.</li>
+  </ul>
+  <p class="ctx">The logos are drawn roughly here; the build uses the real files. TMDB's logo is drawn in TMDB's colours, as TMDB supplies it. That breaks the app's rule of no brand colours, so it would be a second exception after Google's G.</p>
+</div>
+
+<!-- 4. Rating prompt -->
+<div class="card am-item" data-cid="mk-rate" data-label="Mockup: Rating prompt">
+  <h3>Rating prompt</h3>
+  <p class="ctx">Google Play's own review sheet, so someone can rate Fandex on the store without leaving the app.</p>
+  <div class="am-figs">
+    <figure class="am-fig">
+      <div class="am-ph">
+        <div class="am-shot"></div><div class="am-dim"></div>
+        <div class="am-sheet">
+          <div class="am-grab"></div>
+          <div class="am-app"><span class="am-appic">F</span><span><b>Fandex</b><small>Rate this app</small></span></div>
+          <div class="am-stars">
+            <svg class="am-i on" viewBox="0 0 24 24"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>
+            <svg class="am-i on" viewBox="0 0 24 24"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>
+            <svg class="am-i on" viewBox="0 0 24 24"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>
+            <svg class="am-i on" viewBox="0 0 24 24"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>
+            <svg class="am-i" viewBox="0 0 24 24"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>
+          </div>
+          <div class="am-field">Describe your experience (optional)</div>
+          <div class="am-gnote">Reviews are public and include your account name.</div>
+          <div class="am-gbtns"><span>Not now</span><b>Submit</b></div>
+        </div>
+      </div>
+      <figcaption class="cap2">Google draws this sheet. Fandex cannot change it</figcaption>
+    </figure>
+    <div class="am-side">
+      <dl class="facts">
+        <div><dt>When it shows</dt><dd>Once, right after a person's tenth rating has saved.</dd></div>
+        <div><dt>When it never shows</dt><dd>After a rating that failed to save, or after any error on that screen. Never a second time.</dd></div>
+        <div><dt>What Google decides</dt><dd>Google may skip it, and it never tells the app whether the person rated. So the app counts "shown" as "answered" and doesn't ask again.</dd></div>
+        <div><dt>What we can't change</dt><dd>The look and the words. They follow the phone's language and its light or dark setting.</dd></div>
+      </dl>
+    </div>
+  </div>
+  <p class="am-q">Build it like this?</p>
+  <ul class="optl">
+    <li class="rec"><b>A.</b> Once, right after the tenth rating saves. <em>My pick</em></li>
+    <li><b>B.</b> Once, after the tenth rating and no sooner than a week after install. Fewer people asked, but the ones asked have stayed.</li>
+  </ul>
+</div>
+
+<!-- 5. Get the app on fandex.org -->
+<div class="card am-item" data-cid="mk-getapp" data-label="Mockup: Get the app on fandex.org">
+  <h3>"Get the app" on fandex.org</h3>
+  <p class="ctx">A Google Play badge on the website's home page that takes Android visitors to the store page.</p>
+  <div class="am-figs">
+    <figure class="am-fig">
+      <div class="am-ph">
+        <div class="am-url"><span><svg class="am-i" viewBox="0 0 24 24" style="width:8px;height:8px"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>fandex.org</span></div>
+        <div class="am-sl" style="height:140px;background-position:0 0"></div>
+        <div class="am-gpcard am-new">
+          <div><b>Fandex for Android</b><small>Reminders on release day, and it works offline.</small></div>
+          <span class="am-gp"><svg viewBox="0 0 24 26"><path d="M2 1.5 14 13 2 24.5z" fill="var(--am-gp-1)"/><path d="M2 1.5 18 9.5 14 13z" fill="var(--am-gp-2)"/><path d="M18 9.5l4.5 2.5q1 1 0 2L18 16.5 14 13z" fill="var(--am-gp-3)"/><path d="M2 24.5 14 13l4 3.5z" fill="var(--am-gp-4)"/></svg><span><small>GET IT ON</small><b>Google Play</b></span></span>
+        </div>
+        <div class="am-sl" style="height:280px;background-position:0 -140px"></div>
+        <div class="am-sl" style="position:absolute;left:0;right:0;bottom:0;height:32px;background-position:0 100%"></div>
+      </div>
+      <figcaption class="cap2">A. Its own card under the sign-in card</figcaption>
+    </figure>
+    <figure class="am-fig">
+      <div class="am-ph">
+        <div class="am-url"><span><svg class="am-i" viewBox="0 0 24 24" style="width:8px;height:8px"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>fandex.org</span></div>
+        <div class="am-bar am-new" style="border-radius:0;outline-offset:-2px"><span>Fandex is on Android</span><span class="am-gp sm"><svg viewBox="0 0 24 26"><path d="M2 1.5 14 13 2 24.5z" fill="var(--am-gp-1)"/><path d="M2 1.5 18 9.5 14 13z" fill="var(--am-gp-2)"/><path d="M18 9.5l4.5 2.5q1 1 0 2L18 16.5 14 13z" fill="var(--am-gp-3)"/><path d="M2 24.5 14 13l4 3.5z" fill="var(--am-gp-4)"/></svg><span><small>GET IT ON</small><b>Google Play</b></span></span></div>
+        <div class="am-sl" style="height:440px;background-position:0 0"></div>
+        <div class="am-sl" style="position:absolute;left:0;right:0;bottom:0;height:32px;background-position:0 100%"></div>
+      </div>
+      <figcaption class="cap2">B. A thin bar at the very top</figcaption>
+    </figure>
+  </div>
+  <p class="ctx">Only Android phones see it. iPhones and computers get the page as it is today, and so does everyone until the app is live on Play. The real badge is Google's image file, used unchanged.</p>
+  <p class="am-q">Build it like this?</p>
+  <ul class="optl">
+    <li class="rec"><b>A.</b> Its own card under the sign-in card, with one line on what the app adds. <em>My pick</em></li>
+    <li><b>B.</b> A thin bar at the very top of the home page. Seen first, and it pushes everything down a little.</li>
+  </ul>
+</div>
