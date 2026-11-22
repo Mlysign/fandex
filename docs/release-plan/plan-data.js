@@ -75,11 +75,11 @@ window.PLAN = {
     // -------------------------------------------------------------- product
     { id: 'pr-firstrun', area: 'product', group: 'Before the Play check', title: 'Run the first-run flow on a phone with a brand-new account', note: 'Never done on a real phone. It is the first thing every new user sees.', owner: 'Nils', due: '2026-12-13', status: 'todo' },
     { id: 'pr-aab', area: 'product', group: 'Before the Play check', title: 'Build the signed release bundle', note: 'Waits for the upload key.', owner: 'Claude', due: '2027-01-11', status: 'blocked' },
-    { id: 'pr-track', area: 'product', group: 'Before the Play check', title: 'Usage counters, live before anyone outside installs', note: 'Day counters on the server, no device id, so no consent banner. We agree the questions first.', owner: 'Both', due: '2027-01-17', status: 'todo' },
     { id: 'pr-links', area: 'product', group: 'Before the Play check', title: 'App Links, the https Trakt redirect, Google sign-in on Android', note: 'All need Play\'s signing certificate, so they follow the first upload.', owner: 'Claude', due: '2027-01-20', status: 'todo' },
     { id: 'pr-feedback', area: 'product', group: 'Before the Play check', title: 'A "Send feedback" row in the app', note: 'Opens a mail to hello@fandex.org with the version filled in.', owner: 'Claude', due: '2027-01-20', status: 'todo' },
     { id: 'pr-vitals', area: 'product', group: 'Before the Play check', title: 'Watch crashes in Play\'s Android vitals', note: 'Built into Play Console. No extra SDK, nothing for the privacy policy.', owner: 'Both', due: '2027-01-25', status: 'todo' },
 
+    { id: 'pr-crosswhy', area: 'product', group: 'Before launch day', title: 'The Why sheet names the media behind a score', note: '"Learned from 30 shows, 9 films, 2 games." It puts story one on screen. Screenshot 1 and a clip need it. Needs your yes on the wording first.', owner: 'Both', due: '2027-01-17', status: 'todo' },
     { id: 'pr-review', area: 'product', group: 'Before launch day', title: 'Ask for a Play rating at a good moment', note: 'Play\'s own review sheet, after a tenth rating or so. No "do you like it?" question first: Play forbids it.', owner: 'Claude', due: '2027-02-01', status: 'todo' },
     { id: 'pr-share', area: 'product', group: 'Before launch day', title: 'Share a title from the app', note: 'Sends the fandex.org link. Every share is a free ad and a link Google can follow.', owner: 'Claude', due: '2027-02-01', status: 'todo' },
     { id: 'pr-load', area: 'product', group: 'Before launch day', title: 'A load rehearsal against the API', note: 'Replay a busy launch hour and see which limit breaks first.', owner: 'Claude', due: '2027-02-01', status: 'todo' },
@@ -87,6 +87,14 @@ window.PLAN = {
     { id: 'pr-ios', area: 'product', group: 'Before launch day', title: 'A straight answer for iPhone users', note: 'The website works on an iPhone and can sit on the home screen. Say so on /app. A native iOS app waits for traction.', owner: 'Claude', due: '2027-02-08', status: 'todo' },
     { id: 'pr-runbook', area: 'product', group: 'Before launch day', title: 'A launch-day runbook', note: 'What to watch, the kill switches, how to roll back, who answers what.', owner: 'Claude', due: '2027-02-08', status: 'todo' },
     { id: 'pr-bgg', area: 'product', group: 'Before launch day', title: 'Board games, if BoardGameGeek approves the token', note: 'Applied 17 Oct, still pending. Not a blocker: launch without them.', owner: 'Nils', due: '', status: 'waiting' },
+
+    // ------------------------------------------------------------ telemetry
+    { id: 'pr-track', area: 'telemetry', group: 'To build', title: 'Agree the list of signals', note: 'Sixteen are proposed above. Strike or add, then I build.', owner: 'Nils', due: '2026-12-13', status: 'todo' },
+    { id: 'tm-switch', area: 'telemetry', group: 'To build', title: 'Decide: a Settings switch, or ask on first start', note: 'For the app-side totals only. My pick is the switch, on by default.', owner: 'Nils', due: '2026-12-13', status: 'todo' },
+    { id: 'tm-server', area: 'telemetry', group: 'To build', title: 'Server counters: activity, retention, media mix', note: 'Day counters and a count per signup week. No row per person, so erasure and export stay as they are.', owner: 'Claude', due: '2027-01-10', status: 'todo' },
+    { id: 'tm-app', area: 'telemetry', group: 'To build', title: 'App totals, sent once a session', note: 'Counted in memory, sent as one small batch when the app goes to the background, capped per day.', owner: 'Claude', due: '2027-01-17', status: 'todo' },
+    { id: 'tm-admin', area: 'telemetry', group: 'To build', title: 'The Usage page in Admin', note: 'The three story numbers on top, then health, then what people use.', owner: 'Claude', due: '2027-01-24', status: 'todo' },
+    { id: 'tm-read', area: 'telemetry', group: 'To build', title: 'Read the first week of numbers together', note: 'What surprised us, what to change, what to stop counting.', owner: 'Both', due: '2027-02-23', status: 'todo' },
 
     // --------------------------------------------------------------- assets
     { id: 'as-title', area: 'assets', group: 'Store listing', title: 'App title', note: '30 characters. Draft: "Fandex: Movies, Shows & Games".', owner: 'Both', due: '2027-01-10', status: 'todo' },
@@ -105,7 +113,7 @@ window.PLAN = {
     { id: 'as-score', area: 'assets', group: 'Website', title: 'The "How the score works" page', note: 'Live at fandex.org/score. The proof link for every claim about the score.', owner: 'Claude', due: '2026-11-22', status: 'done' },
     { id: 'as-changelog', area: 'assets', group: 'Website', title: 'A public "What\'s new" page', note: 'Shows the app is alive. Feeds the Play release notes.', owner: 'Claude', due: '2027-02-08', status: 'todo' },
 
-    { id: 'as-clips', area: 'assets', group: 'Video and images', title: 'Six short vertical clips', note: '15 to 25 seconds, one hook each: calendar, release-day reminder, the score\'s Why, one library, the widget tick, import.', owner: 'Both', due: '2027-02-08', status: 'todo' },
+    { id: 'as-clips', area: 'assets', group: 'Video and images', title: 'Six short vertical clips', note: '15 to 25 seconds, two per story: taste that travels, one calendar, a score you can read.', owner: 'Both', due: '2027-02-08', status: 'todo' },
     { id: 'as-gifs', area: 'assets', group: 'Video and images', title: 'Three GIFs for posts', note: 'A calendar swipe, a rating with the Why sheet, the widget tick.', owner: 'Claude', due: '2027-02-08', status: 'todo' },
     { id: 'as-stills', area: 'assets', group: 'Video and images', title: 'Four stills for posts', note: '1600 x 900, the real app, one line each. They double as ad images later.', owner: 'Claude', due: '2027-02-08', status: 'todo' },
 
