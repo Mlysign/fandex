@@ -23,6 +23,7 @@ import { pickFiles, readFiles, type PickedFile } from '~/lib/files';
 import { analyzeImport, applyImport, ImportParseError, readImportFiles, type ImportAnalysis, type ImportPhase } from '~/lib/listImport';
 import { usePageTitle } from '~/lib/pageTitle';
 import { count } from '~/lib/plural';
+import { count as countUsage } from '~/lib/usageCounts';
 import { color, radius, space } from '~/theme';
 
 const EXPORT_URL = 'https://letterboxd.com/settings/data/';
@@ -110,6 +111,7 @@ export default function ImportScreen() {
     try {
       const res = await applyImport(db, analysis, (phase, done, total) => setState({ kind: 'applying', analysis, phase, done, total }));
       hold(null);
+      countUsage('import');
       const parts = [
         `${count(res.imported, 'title')} added to your library`,
         res.keptRated ? `${res.keptRated.toLocaleString('en')} you had already rated kept your rating` : null,

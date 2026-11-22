@@ -19,6 +19,7 @@ import { ScoreProvider } from '~/lib/ScoreProvider';
 import { TypeFilterProvider } from '~/lib/typeFilter';
 import { ToastProvider } from '~/components/Toast';
 import { ReleaseReminders } from '~/components/ReleaseReminders';
+import { UsageCounts } from '~/components/UsageCounts';
 import { color, font } from '~/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -147,6 +148,8 @@ export default function RootLayout() {
         <StatusBar style="light" />
         {/* Reminders on the day a wishlisted title or a new season comes out. Phone only, renders nothing. */}
         <ReleaseReminders />
+        {/* Anonymous usage counts, sent when the app goes to the background. Phone only, renders nothing, off until switched on. */}
+        <UsageCounts />
         <Stack
           screenOptions={{
             headerStyle: { backgroundColor: color.surface },

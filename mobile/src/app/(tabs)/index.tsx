@@ -72,7 +72,7 @@ export default function HomeScreen() {
   const rail = (title: string, items: CardItem[] | null | undefined, seeAllHref: string, forYou = false) => {
     if (!items?.length) return null;
     const shown = withoutHidden(items).filter((i) => types.isVisible(i.type));
-    if (shown.length) return <Section key={title}><CardRail title={title} items={shown} seeAllHref={seeAllHref} forYou={forYou} /></Section>;
+    if (shown.length) return <Section key={title}><CardRail title={title} items={shown} seeAllHref={seeAllHref} forYou={forYou} recommended={forYou} /></Section>;
     // The rail has titles, and none of a type you are looking at. Say so; an absent rail reads as broken.
     return (
       <Section key={`${title}:none`}>

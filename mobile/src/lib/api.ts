@@ -24,11 +24,12 @@ export function setSessionToken(token: string | null): void {
   sessionToken = token;
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+/** `anonymous` sends no session token: a request that must not say who sent it (the usage counts). */
+async function request<T>(path: string, init: RequestInit = {}, opts: { anonymous?: boolean } = {}): Promise<T> {
   let res: Response;
   try {
     const headers: Record<string, string> = { ...(init.headers as Record<string, string> | undefined) };
-    if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
+    if (sessionToken && !opts.anonymous) headers.Authorization = `Bearer ${sessionToken}`;
     res = await fetch(`${API_URL}${path}`, { ...init, headers });
   } catch (e) {
     throw new ApiError(0, 'offline', e instanceof Error ? e.message : 'Network request failed');
@@ -457,6 +458,11 @@ export const api = {
   pageview: (path: string, ref: string) => request<{ ok: boolean }>('/v1/t/pv', { ...json('POST', { path, ref }), keepalive: true }),
   adminAnalytics: (days: number) => request<AnalyticsSnapshot>(`/v1/admin/analytics${q({ days })}`),
   adminUsers: (days: number) => request<UsersSnapshot>(`/v1/admin/users${q({ days })}`),
+  /** One batch of the app's usage counts (lib/usageCounts.ts). Sent WITHOUT the session token: a count never says whose it is. */
+  usageCounts: (counts: Record<string, number>) =>
+    request<{ ok: boolean }>('/v1/t/usage', { ...json('POST', { counts }), keepalive: true }, { anonymous: true }),
+  /** The admin Usage page's numbers (worker/src/usage.ts, UsageSnapshot). */
+  adminUsage: (days: number) => request<UsageSnapshot>(`/v1/admin/usage${q({ days })}`),
   /** How your match compares with your own ratings, as counts per medium (lib/ScoreProvider.tsx). No title and no rating leaves the device. */
   scoreReport: (reports: ScoreReport[]) => request<{ ok: boolean; saved: number }>('/v1/me/score-report', json('PUT', { reports })),
   /** Every user's score report summed, for the admin Score page. */
@@ -548,6 +554,20 @@ export interface UsersSnapshot {
   signedInPageviews: { day: string; count: number }[];
   users: { id: string; createdAt: number; lastSeenAt: number | null; library: number; wishlist: number; rated: number; providers: string[] }[];
   generatedAt: string;
+}
+
+/** /v1/admin/usage. The Worker's src/usage.ts is where each number is defined. */
+export interface UsageSnapshot {
+  on: boolean;
+  days: number;
+  /** Every counter of the range, oldest day first. */
+  counters: { day: string; key: string; n: number }[];
+  /** Accounts by how many media types they have rated in (1 to 4). */
+  mediaMix: { types: number; accounts: number }[];
+  /** Per signup week: accounts created, and how many of them saved 5 ratings within 7 days. */
+  firstWeek: { week: string; created: number; rated5: number }[];
+  /** First entry in a media type the account had nothing in, per type, within the range. */
+  newMediaType: { type: string; accounts: number }[];
 }
 
 /** /v1/admin/analytics. The Worker's src/telemetry.ts is where each number is defined. */

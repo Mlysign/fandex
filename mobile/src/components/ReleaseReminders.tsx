@@ -13,7 +13,9 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useRef } from 'react';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
+import { KIND_PREFIX } from '~/lib/releaseReminders';
 import { remindersAvailable, syncReminders } from '~/lib/reminderScheduler';
+import { count as countUsage } from '~/lib/usageCounts';
 
 /** The response already acted on: the hook hands the last one back on every mount. */
 let opened: string | null = null;
@@ -37,6 +39,7 @@ function Runner() {
     running.current = running.current.then(async () => {
       try {
         const run = await syncReminders(db, signedIn);
+        if (run.scheduled) countUsage('reminder:set', run.scheduled);
         if (run.scheduled || run.cancelled || run.seasonsFailed) console.log('reminders', run);
       } catch (e) {
         console.warn('reminders_failed', e instanceof Error ? e.message : String(e));
@@ -51,6 +54,8 @@ function Runner() {
     const key = `${response.notification.request.identifier}@${response.notification.date}`;
     if (opened === key || response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
     opened = key;
+    // A real reminder, not one of the admin's test ones (their identifiers start with "test:").
+    if (Object.values(KIND_PREFIX).some((p) => response.notification.request.identifier.startsWith(p))) countUsage('reminder:tapped');
     const url = response.notification.request.content.data?.url;
     if (typeof url === 'string' && url.startsWith('/')) router.push(url as never);
   }, [response, nav?.key]);

@@ -40,6 +40,7 @@ import { requestWidget, widgetAvailable } from '~/lib/widget';
 import { readReminderPrefs, writeReminderPref, type ReminderPrefs } from '~/lib/releaseReminders';
 import { reminderPermission, remindersAvailable, sendTestReminders, syncReminders, type ReminderPermission } from '~/lib/reminderScheduler';
 import { count } from '~/lib/plural';
+import { readUsagePref, usageCountsOn, writeUsagePref } from '~/lib/usageCounts';
 import { breakpoint, color, font, radius, space, TYPE_PLURAL } from '~/theme';
 
 type Notice = { msg: string; ok: boolean } | null;
@@ -888,6 +889,31 @@ function Reminders() {
   );
 }
 
+/** The anonymous usage counts (lib/usageCounts.ts), on unless switched off. Not shown until they go live. */
+function UsageCountsRow() {
+  const db = useSQLiteContext();
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!usageCountsOn) return;
+    let live = true;
+    void readUsagePref(db).then((v) => { if (live) setOn(v); }, () => undefined);
+    return () => { live = false; };
+  }, [db]);
+  if (!usageCountsOn || on === null) return null;
+  return (
+    <Section eyebrow="Privacy">
+      <Card row>
+        <RowText title="Share anonymous usage counts" text="Totals only, like how often the calendar is opened. No account and no device ID is sent." />
+        <Switch
+          value={on} onValueChange={(v) => { setOn(v); void writeUsagePref(db, v).catch(() => undefined); }}
+          trackColor={{ false: color.border, true: color.accent }} thumbColor={color.textPrimary}
+          accessibilityLabel="Share anonymous usage counts"
+        />
+      </Card>
+    </Section>
+  );
+}
+
 function WidgetOffer() {
   const [note, setNote] = useState<string | null>(null);
   if (!widgetAvailable) return null;
@@ -976,6 +1002,7 @@ function AdminLinks() {
           <Button label="Scoring" onPress={() => router.push('/dev/scoring' as never)} />
           <Button label="Users" onPress={() => router.push('/dev/users' as never)} />
           <Button label="Traffic" onPress={() => router.push('/dev/analytics' as never)} />
+          <Button label="Usage" onPress={() => router.push('/dev/usage' as never)} />
           {remindersAvailable ? <Button label="Test reminders" onPress={testReminders} /> : null}
         </View>
       </Card>
@@ -1055,6 +1082,7 @@ export default function SettingsScreen() {
             <YourData onNotice={setNotice} counts={counts} />
             {auth.profile?.admin ? <AdminLinks /> : null}
             <Reminders />
+            <UsageCountsRow />
             <WidgetOffer />
             {/* The catalog copy's counts and its re-download, for the admin only since 2026-11-05 (Nils: "remove"). */}
             {auth.profile?.admin ? <Device /> : null}

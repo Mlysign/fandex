@@ -21,6 +21,7 @@ import { cardHref, useCardActions, useCardStates, type CardItem, type CardMatch,
 import { toggled } from '~/lib/a11y';
 import { useBarList } from '~/lib/barScroll';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
+import { count as countUsage, recKey } from '~/lib/usageCounts';
 import type { ScoreFacet } from '~/lib/fandexScore';
 import { breakpoint, color, font, radius, type } from '~/theme';
 
@@ -28,12 +29,13 @@ const fmt = (r: number) => (r % 1 === 0 ? r.toFixed(0) : r.toFixed(1));
 export { ratingColor, StarPicker };
 
 /** A tap that is also a link in a browser: follow it inside the app, without a page load. */
-function useLink(href: string) {
+function useLink(href: string, usageKey?: string | null) {
   const router = useRouter();
   const onPress = useCallback((e?: GestureResponderEvent) => {
     (e as unknown as { preventDefault?: () => void } | undefined)?.preventDefault?.();
+    if (usageKey) countUsage(usageKey);
     router.push(href as never);
-  }, [router, href]);
+  }, [router, href, usageKey]);
   // react-native-web renders a pressable with an `href` as an <a>, so the
   // address can be copied and opened in a new tab.
   const anchor = Platform.OS === 'web' ? ({ href } as object) : null;
@@ -109,15 +111,17 @@ export function ActionBar({ item, state, actions, compact }: { item: CardItem; s
 
 // ── The card ─────────────────────────────────────────────────────────────────
 
-export const PosterCard = memo(function PosterCard({ item, state, match, actions, style }: {
+export const PosterCard = memo(function PosterCard({ item, state, match, actions, style, recommended }: {
   item: CardItem;
   state: CardState;
   /** Your match for it, when there is one. The crowd's rating is shown otherwise. */
   match: CardMatch | null;
   actions: Actions;
   style?: StyleProp<ViewStyle>;
+  /** On Home's "Recommended for you": opening it is a usage count (lib/usageCounts.ts). */
+  recommended?: boolean;
 }) {
-  const link = useLink(cardHref(item));
+  const link = useLink(cardHref(item), recommended ? recKey(item.type) : null);
   const explainer = useExplainer();
   return (
     <>
@@ -155,7 +159,7 @@ function useExplainer() {
       if (!canHover || !place) return;
       timer.current = setTimeout(() => setAt(place), HOVER_INTENT_MS);
     },
-    longPress: () => { setAt(null); setSheet(true); },
+    longPress: () => { setAt(null); setSheet(true); countUsage('why'); },
   }), [canHover]);
   return { at, sheet, explain, close: () => setSheet(false) };
 }
@@ -222,7 +226,9 @@ const railPlace = (i: number) => ({ x: i * (RAIL_CARD_W + RAIL_GAP), y: 0 });
  * A rail of poster cards, 150 px each. When its titles change (a type filter
  * tapped), the ones going fade out and the rest slide along to close up (components/flip.tsx).
  */
-export function CardRail({ title, items, forYou, seeAllHref }: { title: string; items: CardItem[]; forYou?: boolean; seeAllHref?: string }) {
+export function CardRail({ title, items, forYou, seeAllHref, recommended }: {
+  title: string; items: CardItem[]; forYou?: boolean; seeAllHref?: string; recommended?: boolean;
+}) {
   const { shown, flip } = useFlip(items, cardKeys);
   const kit = useCardKit(shown);
   return (
@@ -230,7 +236,7 @@ export function CardRail({ title, items, forYou, seeAllHref }: { title: string; 
       {shown.map((item, i) => (
         <FlipCell key={item.key} id={item.key} index={i} flip={flip} place={railPlace}>
           <PosterCard
-            item={item} style={{ width: RAIL_CARD_W }}
+            item={item} style={{ width: RAIL_CARD_W }} recommended={recommended}
             state={kit.stateOf(item.id)} match={(item.id ? kit.scores.get(item.id) : null) ?? item.match ?? null} actions={kit.actions}
           />
         </FlipCell>

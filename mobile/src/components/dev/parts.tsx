@@ -144,8 +144,10 @@ export function RankedBars({ rows, emptyNote, mono = true }: { rows: { label: st
   );
 }
 
-export type DevPage = 'traffic' | 'users' | 'scoring' | 'score';
-const DEV_LINKS: [DevPage, string, string][] = [['traffic', 'Traffic', '/dev/analytics'], ['users', 'Users', '/dev/users'], ['scoring', 'Scoring', '/dev/scoring'], ['score', 'Score', '/dev/score']];
+export type DevPage = 'traffic' | 'usage' | 'users' | 'scoring' | 'score';
+const DEV_LINKS: [DevPage, string, string][] = [
+  ['traffic', 'Traffic', '/dev/analytics'], ['usage', 'Usage', '/dev/usage'], ['users', 'Users', '/dev/users'], ['scoring', 'Scoring', '/dev/scoring'], ['score', 'Score', '/dev/score'],
+];
 
 export function DashHeader({ title, subtitle, here, children }: { title: string; subtitle: string; here: DevPage; children?: ReactNode }) {
   const router = useRouter();

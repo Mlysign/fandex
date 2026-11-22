@@ -19,6 +19,7 @@ import { haptics } from '~/lib/feel';
 import { sendPageview } from '~/lib/pageview';
 import { signInLanding, takeReturnTo } from '~/lib/returnTo';
 import { browserLikeHistory } from '~/lib/tabHistory';
+import { countScreen } from '~/lib/usageCounts';
 import { breakpoint, color } from '~/theme';
 
 /** The sign-in (`LastSignIn.at`) already landed, kept outside the layout so a remount does not land it twice. */
@@ -29,7 +30,8 @@ export default function TabsLayout() {
   const desktop = width >= breakpoint.md;
   const pathname = usePathname();
   // Every screen is a child of this layout, so this is every page opened. The website only: see lib/pageview.ts.
-  useEffect(() => { sendPageview(pathname); }, [pathname]);
+  // On a phone, the screen's usage count instead (lib/usageCounts.ts; off until switched on).
+  useEffect(() => { sendPageview(pathname); countScreen(pathname); }, [pathname]);
   const router = useRouter();
   const { bottom } = useSafeAreaInsets();
   // Back to the title somebody signed in from (lib/returnTo.ts), wherever the

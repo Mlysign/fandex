@@ -34,6 +34,7 @@ import { haptics } from '~/lib/feel';
 import { cursorAfter, interleave, ratedCount, ratingPicksPage, type PickCursor } from '~/lib/ratingPicks';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { TYPE_ICONS } from '~/lib/typeIcons';
+import { count as countUsage } from '~/lib/usageCounts';
 import { breakpoint, color, radius, space, type } from '~/theme';
 
 /** How many ratings the score is set up with. */
@@ -48,6 +49,7 @@ export function Onboarding() {
   useEffect(() => { if (onboarding) setStep('types'); }, [onboarding]);
 
   const typesDone = useCallback(async (picked: MediaType[]) => {
+    countUsage('first:picker');
     setTypes(picked);
     // A Trakt history may already hold the ratings the score needs.
     if ((await ratedCount(db).catch(() => 0)) >= GOAL) endOnboarding();
@@ -217,6 +219,8 @@ function RateStep({ types, onDone }: { types: MediaType[]; onDone: () => void })
     return () => { live = false; };
   }, [db, auth.rowsRevision]);
   const done = count >= GOAL;
+  // Done with five, or skipped (the button, or Back): a usage count either way.
+  const finish = () => { countUsage(done ? 'first:rated5' : 'first:skipped'); onDone(); };
 
   const [picking, setPicking] = useState<CardItem | null>(null);
   const [gridWidth, setGridWidth] = useState(0);
@@ -232,7 +236,7 @@ function RateStep({ types, onDone }: { types: MediaType[]; onDone: () => void })
   const picked = picking ? stateOf(picking.id).rating : null;
 
   return (
-    <Frame tall label="Rate five titles you know" onClose={onDone}>
+    <Frame tall label="Rate five titles you know" onClose={finish}>
       <View style={styles.rateHead}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text accessibilityRole="header" style={type.serifLg}>Rate five titles you know</Text>
@@ -240,7 +244,7 @@ function RateStep({ types, onDone }: { types: MediaType[]; onDone: () => void })
             Your Fandex Score learns your taste from your ratings. Tap something you have seen, played or read, then pick the stars.
           </Text>
         </View>
-        <Button label={done ? 'Done' : 'Skip'} variant={done ? 'primary' : 'ghost'} size="md" pill onPress={onDone} />
+        <Button label={done ? 'Done' : 'Skip'} variant={done ? 'primary' : 'ghost'} size="md" pill onPress={finish} />
       </View>
       <Progress count={count} />
 

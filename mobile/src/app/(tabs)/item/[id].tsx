@@ -37,6 +37,7 @@ import { relatedRails, type RelatedRails } from '~/lib/related';
 import { useScores } from '~/lib/ScoreProvider';
 import { titleIndex } from '~/lib/titleIdentity';
 import { tmdbCollectionFor } from '~/lib/tmdb';
+import { count as countUsage } from '~/lib/usageCounts';
 import { TraktAuthError, traktSignInMessage } from '~/lib/trakt';
 import { color, font, radius, space } from '~/theme';
 
@@ -447,7 +448,7 @@ export default function ItemScreen() {
         seal={(
           <ScoreSeal
             state={panel} fandex={fandex} onSignIn={signInFirst}
-            onWhy={() => { haptics.tap(); setWhy(true); }}
+            onWhy={() => { haptics.tap(); countUsage('why'); setWhy(true); }}
           />
         )}
         yourRating={auth.status === 'signedIn' ? mine?.rating ?? null : null}
