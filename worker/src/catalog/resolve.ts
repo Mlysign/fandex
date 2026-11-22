@@ -20,7 +20,7 @@ import { linkSourceToItem, upsertMediaItem, type SourceItem } from "./ingest";
 import { bookDate, getOpenLibraryWork, openLibraryWorkByIsbn } from "@/lib/sources/openlibrary";
 import { getHardcoverBook, HardcoverNotConfigured } from "@/lib/sources/hardcover";
 import { getBggThing } from "@/lib/sources/bgg";
-import { useHardcover } from "../hardcover";
+import { spendHardcover, useHardcover } from "../hardcover";
 import { useBggToken } from "../shelves";
 
 export type ResolveSource = "tmdb" | "igdb" | "openlibrary" | "hardcover" | "bgg" | "steam";
@@ -321,6 +321,9 @@ async function fetchFromProvider(env: Env, source: ResolveSource, type: MediaTyp
 
   if (source === "hardcover") {
     useHardcover(env);
+    // Every Hardcover call spends Hardcover's daily budget first, and with it
+    // gone this answers nothing, as the shelves do (audit, 2026-11-22).
+    if (!(await spendHardcover(env))) return null;
     const b = await getHardcoverBook(id);
     if (!b) return null;
     // Stored under the id that answered: a duplicate was followed to its canonical book.

@@ -8,7 +8,7 @@ import { mergeLinks, regionalReleaseDate } from "@/lib/merge";
 import { pickRegionalReleaseDate } from "@/lib/sources/normalize";
 import type { MediaLink, MediaType, Source } from "@/types";
 import { kvGet, kvSet } from "../budget";
-import { all, first, nowSeconds } from "../d1";
+import { all, first, nowSeconds, run } from "../d1";
 import { poolSize } from "../keptCounts";
 import { DERIVE_VERSION } from "./derive";
 
@@ -372,6 +372,9 @@ const TAXONOMY_TTL_SECONDS = 3600;
 export const DROP_TAXONOMY_SQL = `DELETE FROM kv WHERE key IN ('${TAXONOMY_BODY_KEY}', '${TAXONOMY_ETAG_KEY}')`;
 
 /** Build the taxonomy and keep it. A failed keep is logged and the built answer still served. */
+/** How long one caller holds the rebuild of an expired taxonomy before another may take it. */
+const TAXONOMY_REBUILD_CLAIM_SECONDS = 60;
+
 export async function keepTaxonomy(db: D1Database): Promise<{ body: string; etag: string }> {
   const t = await taxonomyJson(db);
   const put = db.prepare(
@@ -395,14 +398,30 @@ export async function keptTaxonomyEtag(db: D1Database): Promise<string | null> {
 
 /** The kept taxonomy, built and kept first when there is none. */
 export async function keptTaxonomy(db: D1Database): Promise<{ body: string; etag: string }> {
-  const rows = await all<{ key: string; value: string }>(
+  const now = nowSeconds();
+  const rows = await all<{ key: string; value: string; expires_at: number | null }>(
     db,
-    "SELECT key, value FROM kv WHERE key IN (?, ?) AND (expires_at IS NULL OR expires_at > ?)",
-    [TAXONOMY_BODY_KEY, TAXONOMY_ETAG_KEY, nowSeconds()],
+    "SELECT key, value, expires_at FROM kv WHERE key IN (?, ?)",
+    [TAXONOMY_BODY_KEY, TAXONOMY_ETAG_KEY],
   );
-  const body = rows.find((r) => r.key === TAXONOMY_BODY_KEY)?.value;
-  const etag = rows.find((r) => r.key === TAXONOMY_ETAG_KEY)?.value;
-  return body && etag ? { body, etag } : keepTaxonomy(db);
+  const body = rows.find((r) => r.key === TAXONOMY_BODY_KEY);
+  const etag = rows.find((r) => r.key === TAXONOMY_ETAG_KEY);
+  if (!body || !etag) return keepTaxonomy(db);
+  const fresh = (r: { expires_at: number | null }) => r.expires_at === null || r.expires_at > now;
+  if (fresh(body) && fresh(etag)) return { body: body.value, etag: etag.value };
+  // Expired. Every caller that arrived in the same moment used to rebuild it,
+  // thousands of row reads each, on a route with no limiter (audit,
+  // 2026-11-22). Now one of them claims the rebuild, by moving the etag's
+  // expiry a minute on in a statement only one caller can win, and the others
+  // answer with the copy that has just expired. If the rebuild fails, the
+  // claim runs out and somebody else takes it.
+  const claim = await run(
+    db,
+    "UPDATE kv SET expires_at = ? WHERE key = ? AND expires_at IS NOT NULL AND expires_at <= ?",
+    [now + TAXONOMY_REBUILD_CLAIM_SECONDS, TAXONOMY_ETAG_KEY, now],
+  );
+  if (claim.changes > 0) return keepTaxonomy(db);
+  return { body: body.value, etag: etag.value };
 }
 
 export async function weakEtag(body: string): Promise<string> {

@@ -91,6 +91,15 @@ export async function signIn(env: Env, identity: VerifiedIdentity, current: Sess
 
   if (!existing) {
     // An identity nobody has seen. The session's account takes it, or a new one does.
+    // One per provider: with a second Google on an account, somebody who once
+    // held a session could add their own and keep a way in that "Sign out
+    // everywhere" does not close (audit, 2026-11-22).
+    if (current) {
+      const has = await first<{ x: number }>(
+        db, "SELECT 1 AS x FROM user_identities WHERE user_id = ? AND provider = ? LIMIT 1", [current.userId, identity.provider],
+      );
+      if (has) return { kind: "provider-taken", provider: identity.provider, conflict: identity.provider };
+    }
     const userId = current?.userId ?? crypto.randomUUID();
     try {
       await db.batch([
