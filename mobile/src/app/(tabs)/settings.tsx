@@ -16,7 +16,7 @@ import { BrandGlyph } from '~/components/BrandGlyph';
 import { GoogleMark } from '~/components/GoogleMark';
 import { Button, Sheet } from '~/components/kit';
 import { LegalLinks } from '~/components/LegalLinks';
-import { SignIn, TraktCodeCard, useDiscordSignIn, useGoogleSignIn } from '~/components/SignIn';
+import { SignIn, TraktCodeCard, useDiscordSignIn, useGoogleSignIn, useSteamConnect } from '~/components/SignIn';
 import { useToast } from '~/components/Toast';
 import { Screen, T } from '~/components/ui';
 import { toggled } from '~/lib/a11y';
@@ -382,15 +382,16 @@ function MergePanel({ onNotice }: { onNotice: (n: Notice) => void }) {
  * This is what lets an account made with Google get its Trakt library, without
  * signing out and ending up with two accounts.
  */
-function AddProvider({ provider }: { provider: 'trakt' | 'google' | 'discord' }) {
+function AddProvider({ provider }: { provider: 'trakt' | 'google' | 'discord' | 'steam' }) {
   const auth = useAuth();
   const google = useGoogleSignIn();
   const discord = useDiscordSignIn();
+  const steam = useSteamConnect();
   const meta = PROVIDERS[provider];
   const flow = auth.trakt;
   const traktBusy = provider === 'trakt' && (flow.phase === 'starting' || flow.phase === 'finishing');
-  const busy = traktBusy || (provider === 'google' && google.leaving) || (provider === 'discord' && discord.leaving);
-  const error = provider === 'trakt' ? (flow.phase === 'error' ? flow.message : null) : provider === 'discord' ? discord.error : google.error;
+  const busy = traktBusy || (provider === 'google' && google.leaving) || (provider === 'discord' && discord.leaving) || (provider === 'steam' && steam.leaving);
+  const error = provider === 'trakt' ? (flow.phase === 'error' ? flow.message : null) : provider === 'discord' ? discord.error : provider === 'steam' ? steam.error : google.error;
   const rowStyle = useProviderRowStyle();
 
   if (provider === 'trakt' && flow.phase === 'waiting') return <TraktCodeCard />;
@@ -409,7 +410,7 @@ function AddProvider({ provider }: { provider: 'trakt' | 'google' | 'discord' })
         <View style={styles.providerActions}>
           <Button
             label={busy ? '...' : 'Connect'} disabled={busy}
-            onPress={provider === 'trakt' ? auth.startTraktSignIn : provider === 'discord' ? discord.start : google.start}
+            onPress={provider === 'trakt' ? auth.startTraktSignIn : provider === 'discord' ? discord.start : provider === 'steam' ? steam.start : google.start}
           />
         </View>
       </View>
@@ -1060,6 +1061,7 @@ export default function SettingsScreen() {
               {auth.profile && !identities.some((i) => i.provider === 'trakt') ? <AddProvider provider="trakt" /> : null}
               {auth.profile && googleAvailable() && !identities.some((i) => i.provider === 'google') ? <AddProvider provider="google" /> : null}
               {auth.profile && discordAvailable() && !identities.some((i) => i.provider === 'discord') ? <AddProvider provider="discord" /> : null}
+              {auth.profile && !identities.some((i) => i.provider === 'steam') ? <AddProvider provider="steam" /> : null}
               {!auth.profile ? <T variant="bodySm">Offline. Showing what is on this device.</T> : null}
               {/* A local Worker only, as on the sign-in card: joining two accounts, tried without a real provider. */}
               {LOCAL_API && auth.profile && !identities.some((i) => i.provider === 'discord') ? (

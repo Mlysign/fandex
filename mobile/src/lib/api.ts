@@ -394,6 +394,8 @@ export const api = {
   signInWithGoogle: (idToken: string, nonce: string) => request<SignInResult>('/v1/auth/google', json('POST', { idToken, nonce })),
   /** Discord's access token from its implicit grant (lib/discord.ts). Checked with Discord there, never stored. */
   signInWithDiscord: (accessToken: string) => request<SignInResult>('/v1/auth/discord', json('POST', { accessToken })),
+  /** Steam's OpenID answer, as the return page got it (lib/steam.ts). Needs a session: Steam is a connection, never a way in. */
+  connectSteam: (params: Record<string, string>) => request<SignInResult>('/v1/auth/steam', json('POST', { params })),
   /** A test account. Only a Worker on a developer's machine has this route (worker/src/devLogin.ts). */
   devSignIn: (account: string) => request<SignInResult>('/v1/dev/login', json('POST', { account })),
   /** Add a test account's way in to the signed-in account, through the real sign-in: how joining accounts is tried locally. */

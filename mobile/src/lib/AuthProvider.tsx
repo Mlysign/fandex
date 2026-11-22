@@ -22,6 +22,7 @@ import { deviceRegion } from '~/lib/region';
 import { DISCORD_CLIENT_ID, GOOGLE_CLIENT_ID, traktConfigured } from '~/lib/config';
 import { GOOGLE_APP_REDIRECT, GOOGLE_APP_STATE_PREFIX, GOOGLE_SITE_ORIGIN, googleAuthorizeUrl, newGoogleSignIn, readGoogleReturn, startGoogleSignIn as startGoogleWebSignIn } from '~/lib/google';
 import { DISCORD_APP_REDIRECT, DISCORD_APP_STATE_PREFIX, DISCORD_SITE_REDIRECT, discordAuthorizeUrl, newState as newDiscordState, readDiscordReturn, startDiscordWebSignIn } from '~/lib/discord';
+import { STEAM_APP_REDIRECT, STEAM_APP_STATE_PREFIX, STEAM_SITE_ORIGIN, newState as newSteamState, readSteamReturn, startSteamWebConnect, steamOpenIdUrl } from '~/lib/steam';
 import { clearState, StaleSync, syncState } from '~/lib/stateSync';
 import { ownGainsAccountKey } from '~/lib/db';
 import { onRowsChangedElsewhere } from '~/lib/rowsBus';
@@ -78,6 +79,14 @@ interface Auth {
    */
   startDiscordSignIn: (returnTo: string) => Promise<void>;
   finishDiscordSignIn: (accessToken: string) => Promise<SignInResult['outcome'] | null>;
+  /**
+   * Connect a Steam account to the signed-in one (lib/steam.ts). Never a way
+   * in: the Worker refuses it without a session. In a browser the page leaves
+   * for Steam and `/auth/steam` calls `finishSteamConnect`; on a phone a
+   * browser sheet opens and this finishes it itself. Throws with the reason.
+   */
+  startSteamConnect: (returnTo: string) => Promise<void>;
+  finishSteamConnect: (params: Record<string, string>) => Promise<SignInResult['outcome'] | null>;
   /** Sign in as a test account. Only against a Worker on this machine; anywhere else it reports that there is none. */
   devSignIn: (account: string) => Promise<void>;
   /** Connect a test account to the signed-in one (a local Worker only), as connecting Discord would. Throws with the reason. */
@@ -163,7 +172,7 @@ const Ctx = createContext<Auth | null>(null);
 const PROVIDER_NAMES: Record<string, string> = { trakt: 'Trakt', google: 'Google', discord: 'Discord', steam: 'Steam' };
 const providerName = (p: string) => PROVIDER_NAMES[p] ?? p;
 
-function signInMessage(e: unknown, provider: 'Trakt' | 'Google' | 'Discord' = 'Trakt'): string {
+function signInMessage(e: unknown, provider: 'Trakt' | 'Google' | 'Discord' | 'Steam' = 'Trakt'): string {
   if (e instanceof ApiError) {
     switch (e.code) {
       case 'offline': return 'No connection. Try again when you are online.';
@@ -610,6 +619,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await finishDiscordSignIn(back.accessToken);
   }, [finishDiscordSignIn]);
 
+  const finishSteamConnect = useCallback(async (params: Record<string, string>): Promise<SignInResult['outcome'] | null> => {
+    let result;
+    try {
+      result = await api.connectSteam(params);
+    } catch (e) {
+      if (adoptMerge(e)) return null;
+      if (e instanceof ApiError && e.code === 'unauthorized') throw new Error('Sign in first, then connect Steam.');
+      throw new Error(signInMessage(e, 'Steam'));
+    }
+    await secretSet(SESSION_KEY, result.token);
+    setSession(result.token);
+    const me = await api.me().catch(() => null);
+    setProfile(me);
+    profileRef.current = me; // before the sync below asks whether Steam is connected
+    setStatus('signedIn');
+    signedInAs(result.outcome);
+    // The first pull of the Steam library, now and not when it next goes stale.
+    void pullRows(true).then(() => runSteamSync(false));
+    return result.outcome;
+  }, [adoptMerge, pullRows, runSteamSync, signedInAs]);
+
+  const startSteamConnect = useCallback(async (returnTo: string) => {
+    if (Platform.OS === 'web') {
+      startSteamWebConnect(returnTo);
+      return;
+    }
+    // A browser sheet that goes to Steam, comes back to the site, and is handed
+    // on to fandex://auth/steam: Steam's answer names the page it was made for,
+    // and the Worker accepts only our own site's.
+    const state = `${STEAM_APP_STATE_PREFIX}${newSteamState()}`;
+    const url = steamOpenIdUrl({ origin: STEAM_SITE_ORIGIN, state });
+    const result = await WebBrowser.openAuthSessionAsync(url, STEAM_APP_REDIRECT);
+    // Closed without an answer: back where they started, not an error.
+    if (result.type !== 'success') return;
+    const back = readSteamReturn(result.url.split('?')[1] ?? '', { state, returnTo });
+    if (!back.ok) {
+      if (back.reason === 'declined') return;
+      throw new Error('Steam did not confirm the sign-in. Try again.');
+    }
+    await finishSteamConnect(back.params);
+  }, [finishSteamConnect]);
+
   /**
    * Sign in as a test account, on a developer's Worker (worker/src/devLogin.ts).
    * No Trakt tokens are kept, on purpose: with none, a rating has nowhere to go
@@ -783,7 +834,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={{
       status, profile, trakt, startTraktSignIn, startTraktCodeSignIn, cancelTraktSignIn, startGoogleSignIn, finishGoogleSignIn,
-      startDiscordSignIn, finishDiscordSignIn, devSignIn, devConnect, signOut,
+      startDiscordSignIn, finishDiscordSignIn, startSteamConnect, finishSteamConnect, devSignIn, devConnect, signOut,
       rowsSyncing, rowsError, rowsRevision, syncRows, rowsChanged, traktSync, syncTraktNow, steamSync, syncSteamNow,
       region, savePrefs, disconnect, deleteAccount, pendingMerge, completeMerge, cancelMerge,
       lastSignIn, onboarding, endOnboarding,

@@ -76,6 +76,27 @@ export function useDiscordSignIn(): { start: () => void; leaving: boolean; error
   return { start, leaving, error };
 }
 
+/** Connect Steam to the signed-in account (lib/steam.ts). A Settings row only: Steam is never a way in. */
+export function useSteamConnect(): { start: () => void; leaving: boolean; error: string | null } {
+  const auth = useAuth();
+  const [leaving, setLeaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const start = () => {
+    setLeaving(true);
+    setError(null);
+    const here = Platform.OS === 'web' ? `${window.location.pathname}${window.location.search}` : '/settings';
+    auth.startSteamConnect(here).then(
+      // In a browser the page has left; on a phone the sheet has closed.
+      () => { if (Platform.OS !== 'web') setLeaving(false); },
+      (e: unknown) => {
+        setLeaving(false);
+        setError(e instanceof Error ? e.message : 'Could not open Steam.');
+      },
+    );
+  };
+  return { start, leaving, error };
+}
+
 /** The Trakt code, while the person confirms it at trakt.tv. Shown for `auth.trakt.phase === 'waiting'`. */
 export function TraktCodeCard() {
   const auth = useAuth();

@@ -78,8 +78,8 @@ export function googleAvailable(): boolean {
  */
 export function safeReturnPath(path: unknown): string {
   if (typeof path !== 'string' || !/^\/(?![/\\])/.test(path) || path.includes('\\')) return '/profile';
-  // Never a return screen: Google's, or Discord's (lib/discord.ts), which uses this too.
-  for (const screen of [GOOGLE_RETURN_PATH, '/auth/discord']) {
+  // Never a return screen: Google's, or Discord's and Steam's (lib/discord.ts, lib/steam.ts), which use this too.
+  for (const screen of [GOOGLE_RETURN_PATH, '/auth/discord', '/auth/steam']) {
     if (path === screen || path.startsWith(`${screen}?`) || path.startsWith(`${screen}#`)) return '/profile';
   }
   return path;
