@@ -169,6 +169,30 @@ describe("what a save costs", () => {
   });
 });
 
+describe("the admin pages", () => {
+  const admin = { ...env, ADMIN_USER_IDS: A } as typeof env;
+  async function ask(path: string, userId: string, method = "GET"): Promise<Response> {
+    const token = await createSession(env, { userId, provider: "google", displayName: null });
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(new Request(`https://api.test${path}`, { method, headers: { Authorization: `Bearer ${token}` } }), admin, ctx);
+    await waitOnExecutionContext(ctx);
+    return res;
+  }
+
+  it("answer from a copy kept for an hour, and an erased account takes the copy with it", async () => {
+    await twoAccounts();
+    const first = await (await ask("/v1/admin/users?days=30", A)).text();
+    await db.prepare("INSERT INTO users (id) VALUES ('later')").run();
+    // The same answer, not a new count of every account's rows.
+    expect(await (await ask("/v1/admin/users?days=30", A)).text()).toBe(first);
+    expect(await count("kv", "key LIKE 'admin:%'")).toBe(1);
+
+    expect((await ask("/v1/me", B, "DELETE")).status).toBe(200);
+    expect(await count("kv", "key LIKE 'admin:%'")).toBe(0);
+    expect(await (await ask("/v1/admin/users?days=30", A)).text()).not.toBe(first);
+  });
+});
+
 describe("a show's episodes", () => {
   it("answers 404 for a show it does not hold, and for an id that is not one", async () => {
     const ctx = createExecutionContext();

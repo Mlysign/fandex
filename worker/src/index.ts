@@ -713,6 +713,25 @@ function withAdminFlag(env: Env, userId: string, profile: string): string {
   return isAdmin(env, userId) ? `${profile.slice(0, -1)},"admin":true}` : profile;
 }
 
+/** How long an admin page's answer is kept. */
+const ADMIN_ANSWER_TTL_SECONDS = 3600;
+/** The `kv` keys the kept admin answers live under. Erasure removes them (below). */
+const ADMIN_ANSWER_PREFIX = "admin:";
+
+/**
+ * An admin page's answer, from the copy kept in `kv` or built and kept now.
+ * `kv` is never exported (cron.ts), and an account that is deleted takes the
+ * kept answers with it, since the Users page's answer names accounts.
+ */
+async function keptAdminAnswer(db: D1Database, name: string, build: () => Promise<object>): Promise<string> {
+  const key = `${ADMIN_ANSWER_PREFIX}${name}`;
+  const kept = await kvGet(db, key);
+  if (kept !== null) return kept;
+  const body = JSON.stringify(await build());
+  await kvSet(db, key, body, ADMIN_ANSWER_TTL_SECONDS);
+  return body;
+}
+
 /**
  * The admin pages' routes. A caller who is not an admin gets the same 404 as a
  * path that does not exist, signed in or not.
@@ -724,14 +743,21 @@ async function admin(c: Ctx, method: string, b?: string, d?: string): Promise<Re
   if (b === "analytics" && method === "GET") {
     return json(await analyticsSnapshot(c.env.DB, parseDays(c.url.searchParams.get("days"))), 200, PRIVATE);
   }
+  // The Users and Usage pages read every account's rows: half a million rows
+  // a look at three hundred accounts (measured 2026-11-22), so a few looks at a
+  // thousand would be the day's reads. Each answer is kept for an hour.
   if (b === "users" && method === "GET") {
-    return json(await usersSnapshot(c.env.DB, parseDays(c.url.searchParams.get("days"))), 200, PRIVATE);
+    const days = parseDays(c.url.searchParams.get("days"));
+    return json(await keptAdminAnswer(c.env.DB, `users:${days}`, () => usersSnapshot(c.env.DB, days)), 200, PRIVATE);
   }
   // The Usage page (usage.ts). What this isolate still holds is written first,
-  // so the admin's own look is not thirty seconds behind.
+  // so a fresh answer is not thirty seconds behind.
   if (b === "usage" && method === "GET" && !d) {
-    await flushUsage(c.env);
-    return json(await usageSnapshot(c.env, parseDays(c.url.searchParams.get("days"))), 200, PRIVATE);
+    const days = parseDays(c.url.searchParams.get("days"));
+    return json(await keptAdminAnswer(c.env.DB, `usage:${days}`, async () => {
+      await flushUsage(c.env);
+      return usageSnapshot(c.env, days);
+    }), 200, PRIVATE);
   }
   // The Score page: every user's score report summed (scoreReport.ts).
   if (b === "score" && method === "GET" && !d) {
@@ -852,6 +878,8 @@ async function me(c: Ctx, method: string, b?: string, d?: string): Promise<Respo
     }
     if (method === "DELETE") {
       const result = await deleteAccount(db, userId);
+      // The admin pages' kept answers may still name the account (keptAdminAnswer).
+      await db.prepare("DELETE FROM kv WHERE key LIKE ?").bind(`${ADMIN_ANSWER_PREFIX}%`).run();
       return json({ deleted: true, ...result }, 200, { ...PRIVATE, "Set-Cookie": clearedSessionCookie() });
     }
   }
