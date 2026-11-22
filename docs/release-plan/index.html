@@ -845,8 +845,23 @@ async function folderClick() {
   if (dir) return toast('Every change is written to comments.js in this folder.');
   try {
     if (waiting) { if ((await waiting.requestPermission({ mode: 'readwrite' })) === 'granted') await useFolder(waiting); }
-    else await useFolder(await showDirectoryPicker({ id: 'fandex-plan', mode: 'readwrite' }));
+    else {
+      // Chrome always shows its folder dialog and a page cannot fill it in. The next
+      // best thing: this folder's path goes on the clipboard, so it is paste and Enter.
+      const path = folderPath();
+      if (path) { try { await navigator.clipboard.writeText(path); toast('This folder\'s path is copied. In the dialog: Ctrl+V, Enter, then "Select folder".', 120000); } catch { /* then it is picked by hand */ } }
+      let h;
+      try { h = await showDirectoryPicker({ id: 'fandex-plan', mode: 'readwrite' }); } finally { $('#toast').style.display = 'none'; }
+      await useFolder(h);
+    }
   } catch (e) { if (e.name !== 'AbortError') toast('The folder could not be opened.'); }
+}
+// Where this page sits on disk, as the folder dialog wants it typed.
+function folderPath() {
+  if (location.protocol !== 'file:') return '';
+  let p = decodeURIComponent(location.pathname).replace(/\/[^/]*$/, '');
+  if (/^\/[A-Za-z]:/.test(p)) p = p.slice(1).replace(/\//g, '\\');
+  return p;
 }
 async function restoreFolder() {
   if (!canFolder) return paintFolder();
@@ -1073,7 +1088,7 @@ function renderPanel() {
     ? `<div class="cp-help"><p><b style="color:var(--tx)">No open comments.</b></p><p>Select any text in the plan and press <b style="color:var(--gold)">Comment</b>.</p><p>For a chart, picture, card or row: press <kbd>C</kbd>, then click it.</p>${dir
       ? '<p>Everything is written to <span class="mono">comments.js</span> in this folder the moment you change it. Claude reads it there, and replies show up here on their own.</p>'
       : canFolder
-        ? '<p>Right now your comments are kept in this browser only.</p><p>Press <b style="color:var(--gold)">Save into this folder</b> once, pick the folder this page is in, and from then on they are written to a file beside the page. That file moves with the folder, and Claude reads it.</p>'
+        ? '<p>Right now your comments are kept in this browser only.</p><p>Press <b style="color:var(--gold)">Save into this folder</b> once. Chrome opens its folder dialog: press Ctrl+V and Enter (the path is already copied), then "Select folder". From then on they are written to a file beside the page. That file moves with the folder, and Claude reads it.</p>'
         : '<p>Everything is saved in this browser the moment you write it.</p><p>This browser cannot write into the folder. Use Chrome or Edge for that, or press <b style="color:var(--gold)">Copy for Claude</b> and paste into the chat.</p>'}</div>`
     : `<div class="cp-help">Nothing resolved yet.</div>`;
   body.innerHTML = html;
@@ -1092,7 +1107,7 @@ function refresh() {
   const n = newCount(); $('#new-n').textContent = n || ''; $('#btn-copy').classList.toggle('on', n > 0);
 }
 
-function toast(t) { const el = $('#toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => (el.style.display = 'none'), 2600); }
+function toast(t, ms = 2600) { const el = $('#toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => (el.style.display = 'none'), ms); }
 function compose(el, quote, occ) {
   draft = { anchor: el.dataset.cid, where: whereOf(el), quote: quote || '', occ: occ || 0 };
   document.body.classList.remove('cp-closed', 'cmode'); $('#btn-mode').classList.remove('on');
