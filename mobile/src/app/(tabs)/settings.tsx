@@ -38,7 +38,7 @@ import type { TraktSyncResult } from '~/lib/traktSync';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { requestWidget, widgetAvailable } from '~/lib/widget';
 import { readReminderPrefs, writeReminderPref, type ReminderPrefs } from '~/lib/releaseReminders';
-import { reminderPermission, remindersAvailable, syncReminders, type ReminderPermission } from '~/lib/reminderScheduler';
+import { reminderPermission, remindersAvailable, sendTestReminders, syncReminders, type ReminderPermission } from '~/lib/reminderScheduler';
 import { count } from '~/lib/plural';
 import { breakpoint, color, font, radius, space, TYPE_PLURAL } from '~/theme';
 
@@ -962,6 +962,13 @@ function Device() {
 /** The admin pages have no link anywhere else: on the site their addresses were typed. */
 function AdminLinks() {
   const router = useRouter();
+  const db = useSQLiteContext();
+  const { toast } = useToast();
+  const testReminders = () => {
+    sendTestReminders(db)
+      .then((n) => toast(n ? `${count(n, 'test reminder')} sent.` : 'Nothing to make a test reminder from.', n ? 'success' : 'info'))
+      .catch((e: unknown) => toast(e instanceof Error ? e.message : String(e), 'error'));
+  };
   return (
     <Section eyebrow="Admin" hint="Only your account sees this.">
       <Card>
@@ -969,6 +976,7 @@ function AdminLinks() {
           <Button label="Scoring" onPress={() => router.push('/dev/scoring' as never)} />
           <Button label="Users" onPress={() => router.push('/dev/users' as never)} />
           <Button label="Traffic" onPress={() => router.push('/dev/analytics' as never)} />
+          {remindersAvailable ? <Button label="Test reminders" onPress={testReminders} /> : null}
         </View>
       </Card>
     </Section>

@@ -12,8 +12,8 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { Platform } from 'react-native';
 import { getMeta, setMeta } from '~/lib/db';
 import {
-  EPISODE_PREFIX, episodeStarts, KIND_PREFIX, localDay, planReminders, readReminderPrefs, RELEASE_PREFIX, SEASON_PREFIX,
-  seasonStarts, wishlistReleases, type EpisodeStart, type Reminder, type ReminderKind, type ReminderPrefs, type SeasonStart,
+  caughtUpShows, EPISODE_PREFIX, episodeStarts, KIND_PREFIX, localDay, planReminders, readReminderPrefs, RELEASE_PREFIX, SEASON_PREFIX,
+  seasonStarts, wishlistReleases, type EpisodeStart, type Reminder, type ReminderKind, type ReminderPrefs, type SeasonStart, type WishlistRelease,
 } from '~/lib/releaseReminders';
 import { tmdbShowStatus } from '~/lib/tmdb';
 
@@ -134,6 +134,54 @@ export async function syncReminders(db: SQLiteDatabase, signedIn: boolean, opts:
     run.scheduled++;
   }
   return run;
+}
+
+/**
+ * Admin only (Settings → Admin): shows one reminder of each kind NOW, worded by
+ * `planReminders` exactly as the real ones are, about titles from your own rows
+ * (a wishlisted title, shows you watch, the next episode TMDB names). Their
+ * identifiers carry no reminder prefix, so `syncReminders` never touches them.
+ * Returns how many were shown.
+ */
+export async function sendTestReminders(db: SQLiteDatabase): Promise<number> {
+  if (!remindersAvailable) return 0;
+  setHandler();
+  if ((await reminderPermission()) !== 'granted') throw new Error('Notifications are not allowed for Fandex.');
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync(CHANNEL, { name: 'Releases', importance: Notifications.AndroidImportance.DEFAULT });
+  }
+  const now = new Date();
+  const day = (n: number) => localDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + n));
+  const wish = await db.getFirstAsync<WishlistRelease>(
+    `SELECT c.id, c.type, c.title, c.slug, c.release_date
+       FROM item_state s JOIN catalog c ON c.id = s.media_item_id
+      WHERE s.relation = 'wishlist' ORDER BY (c.release_date >= ?) DESC, c.release_date LIMIT 1`,
+    [localDay(now)],
+  );
+  const shows = await caughtUpShows(db);
+  const releases: WishlistRelease[] = wish ? [{ ...wish, release_date: day(1) }] : [];
+  const seasons: SeasonStart[] = [];
+  const episodes: EpisodeStart[] = [];
+  const [epShow, seasonShow] = [shows[0], shows[1] ?? shows[0]];
+  if (epShow) {
+    const st = await tmdbShowStatus(epShow.tmdbId).catch(() => null);
+    const next = st?.nextToAir ?? (st?.lastAired ? { season: st.lastAired.season, episode: st.lastAired.episode + 1 } : { season: 1, episode: 2 });
+    episodes.push({ id: epShow.id, title: epShow.title, slug: epShow.slug, season: next.season, episode: next.episode, release_date: day(2) });
+  }
+  if (seasonShow) {
+    const st = await tmdbShowStatus(seasonShow.tmdbId).catch(() => null);
+    const last = st?.seasons.at(-1)?.season ?? 1;
+    seasons.push({ id: seasonShow.id, title: seasonShow.title, slug: seasonShow.slug, season: last + 1, release_date: day(1) });
+  }
+  const plan = planReminders({ releases, seasons, episodes, now });
+  for (const r of plan) {
+    await Notifications.scheduleNotificationAsync({
+      identifier: `test:${r.identifier}`,
+      content: { title: r.title, body: r.body, data: { url: r.url } },
+      trigger: Platform.OS === 'android' ? { channelId: CHANNEL } : null,
+    });
+  }
+  return plan.length;
 }
 
 /** One reminder. The same identifier replaces the one set before. */
