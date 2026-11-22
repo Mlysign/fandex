@@ -15,6 +15,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { first, nowSeconds, run } from "../d1";
 import type { Env } from "../env";
+import { countActive } from "../usage";
 
 export interface SessionUser {
   userId: string;
@@ -45,14 +46,14 @@ function secret(env: Env): Uint8Array {
   return new TextEncoder().encode(env.JWT_SECRET);
 }
 
-async function sessionRow(db: D1Database, userId: string): Promise<{ epoch: number; lastSeenAt: number } | null> {
-  const row = await first<{ session_epoch: number; last_seen_at: number }>(
+async function sessionRow(db: D1Database, userId: string): Promise<{ epoch: number; lastSeenAt: number; createdAt: number } | null> {
+  const row = await first<{ session_epoch: number; last_seen_at: number; created_at: number }>(
     db,
-    "SELECT session_epoch, last_seen_at FROM users WHERE id = ?",
+    "SELECT session_epoch, last_seen_at, created_at FROM users WHERE id = ?",
     [userId],
   );
   if (!row) return null;
-  return { epoch: row.session_epoch ?? 0, lastSeenAt: row.last_seen_at ?? 0 };
+  return { epoch: row.session_epoch ?? 0, lastSeenAt: row.last_seen_at ?? 0, createdAt: row.created_at ?? 0 };
 }
 
 export async function createSession(env: Env, user: SessionUser): Promise<string> {
@@ -113,7 +114,14 @@ export async function readSession(
   // an authenticated read is not also a row write.
   const now = nowSeconds();
   if (Math.floor(row.lastSeenAt / SECONDS_PER_DAY) !== Math.floor(now / SECONDS_PER_DAY)) {
-    const touch = run(env.DB, "UPDATE users SET last_seen_at = ? WHERE id = ?", [now, userId]).catch(() => undefined);
+    // `AND last_seen_at < ?` makes the stamp happen once: of two requests that
+    // both read yesterday's value, one changes the row and the other changes
+    // nothing. The usage counters (usage.ts) count only the one that did, so
+    // "active accounts" is accounts and not requests. They carry no user id.
+    const dayStart = Math.floor(now / SECONDS_PER_DAY) * SECONDS_PER_DAY;
+    const touch = run(env.DB, "UPDATE users SET last_seen_at = ? WHERE id = ? AND COALESCE(last_seen_at, 0) < ?", [now, userId, dayStart])
+      .then((meta) => { if (meta.changes > 0) countActive(env, row.createdAt, row.lastSeenAt, now, defer); })
+      .catch(() => undefined);
     if (defer) defer(touch); else await touch;
   }
 

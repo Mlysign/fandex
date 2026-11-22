@@ -32,6 +32,10 @@ export interface Env {
   DAILY_FETCH_CAP: string;
   /** Counted pageviews allowed per UTC day. Optional; telemetry.ts has the default. */
   DAILY_PAGEVIEW_CAP?: string;
+  /** "1" switches the usage counters on (usage.ts). Anything else, or unset, is off. */
+  USAGE_COUNTERS?: string;
+  /** Row writes the usage counters may spend per UTC day. Optional; usage.ts has the default. */
+  DAILY_USAGE_CAP?: string;
   /** Fandex user ids that may call /v1/admin/*, comma separated. Unset means nobody. */
   ADMIN_USER_IDS?: string;
   /** User-state row writes allowed per UTC day across everyone. Optional; me.ts has the default. */

@@ -38,6 +38,7 @@ import { discoverIgdbFacetCards, discoverIgdbUpcoming, igdbConfigured, igdbImage
 import { buildAccountExportJson, deleteAccount, disconnectIdentity, type MergeResolution } from "./account";
 import { isAdmin, parseDays, usersSnapshot } from "./admin";
 import { analyticsSnapshot, countPageView } from "./telemetry";
+import { bump, countAppBatch, countRequest, countSignup, flushUsage, usageOn, usageSnapshot } from "./usage";
 import { parseScoreReports, saveScoreReports, scoreSummary } from "./scoreReport";
 import {
   clearIpOverride, clearLabel, clearTagOverride, deleteAlias, deleteBundle, deleteCategory, parseAliases, parseCategory, parseCategoryWeights,
@@ -108,6 +109,8 @@ export default {
         response = error(500, "internal");
       }
     }
+    // After the answer is decided, and never able to change it (usage.ts).
+    countRequest(env, request.method, c.url.pathname.split("/").filter(Boolean), response.status, c.defer);
     return withCors(env, request, response);
   },
 
@@ -280,6 +283,18 @@ async function route(c: Ctx): Promise<Response> {
     return json({ ok: true }, 200, PRIVATE);
   }
 
+  // The app's usage counts (usage.ts): totals a device gathered, sent as one
+  // batch. No session is read and nothing about the sender is kept. Like the
+  // beacon it answers 200 whatever it decided.
+  if (a === "t" && b === "usage" && method === "POST" && !d) {
+    if (!usageOn(c.env)) return json({ ok: true }, 200, PRIVATE);
+    if (!(await allow(c.env.RL_WRITE, `usage:${clientIp(request)}`))) return json({ ok: true }, 200, PRIVATE);
+    let body: unknown = null;
+    try { body = await readJson(request, AUTH_BODY_MAX); } catch { /* an unreadable body counts nothing */ }
+    countAppBatch(c.env, body, c.defer);
+    return json({ ok: true }, 200, PRIVATE);
+  }
+
   if (a === "me") return me(c, method, b, d);
 
   if (a === "admin") return admin(c, method, b, d);
@@ -331,7 +346,7 @@ const PUBLIC_ROUTES: [RegExp, string][] = [
   [/^cover\/hardcover\/.+$/, "GET, HEAD"],
   [/^calendar\/[^/]+$/, "GET"],
   [/^auth\/(google|trakt|discord|merge|logout)$/, "POST"],
-  [/^t\/pv$/, "POST"],
+  [/^t\/(pv|usage)$/, "POST"],
 ];
 
 function methodsFor(path: string): string | null {
@@ -555,7 +570,15 @@ async function authenticate(c: Ctx, provider: "google" | "trakt" | "discord"): P
   // user id from the body.
   const session = await readSession(c.env, c.request, c.defer);
   if (session && !csrfOk(c.env, c.request, session)) return error(403, "forbidden");
-  return signInResponse(c, await signIn(c.env, identity, session?.user ?? null));
+  const out = await signIn(c.env, identity, session?.user ?? null);
+  countSignIn(c, provider, out.kind);
+  return signInResponse(c, out);
+}
+
+/** A new account, or a new way in to an old one, for the usage counters. No user id. */
+function countSignIn(c: Ctx, provider: string, kind: SignInOutcome["kind"]): void {
+  if (kind === "created") countSignup(c.env, provider, nowSeconds(), c.defer);
+  else if (kind === "linked") bump(c.env, `link:${provider}`, 1, c.defer);
 }
 
 async function merge(c: Ctx): Promise<Response> {
@@ -609,6 +632,12 @@ async function admin(c: Ctx, method: string, b?: string, d?: string): Promise<Re
   }
   if (b === "users" && method === "GET") {
     return json(await usersSnapshot(c.env.DB, parseDays(c.url.searchParams.get("days"))), 200, PRIVATE);
+  }
+  // The Usage page (usage.ts). What this isolate still holds is written first,
+  // so the admin's own look is not thirty seconds behind.
+  if (b === "usage" && method === "GET" && !d) {
+    await flushUsage(c.env);
+    return json(await usageSnapshot(c.env, parseDays(c.url.searchParams.get("days"))), 200, PRIVATE);
   }
   // The Score page: every user's score report summed (scoreReport.ts).
   if (b === "score" && method === "GET" && !d) {
