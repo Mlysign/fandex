@@ -263,6 +263,60 @@ body.cp-closed #cpanel{display:none}
 .btn.right{margin-left:auto}
 .composer{background:var(--ov);border:1px solid var(--gold);border-radius:12px;padding:12px;margin-bottom:12px}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ov);border:1px solid var(--line2);color:var(--tx);padding:9px 14px;border-radius:10px;font-size:13px;z-index:50;display:none}
+/* ---------- plain decision cards, facts, mockups ---------- */
+section>h2{font-size:34px;margin-bottom:8px}
+.dec{display:block}
+.dec h3{font-size:19px;line-height:1.2;margin:0 110px 8px 0}
+.dec{position:relative}.dec .pill{position:absolute;top:16px;right:16px}
+.ctx{font-size:13.5px;color:var(--tx2);margin:0 0 8px;line-height:1.5}
+.ans{font-size:14px;color:var(--ok);font-weight:600;margin:0 0 6px}
+.optl{list-style:none;margin:0 0 8px;padding:0;display:grid;gap:6px}
+.optl li{border:1px solid var(--line2);border-radius:10px;padding:8px 11px;font-size:13.5px;color:var(--tx2);line-height:1.45}
+.optl li b{color:var(--tx)}
+.optl li.rec{border-color:rgba(200,162,75,.7);background:var(--gold-s)}
+.optl li em{font-style:normal;font:400 10px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-left:6px;white-space:nowrap}
+dl.facts{margin:0;display:grid;gap:10px}
+dl.facts dt{font:400 10px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin-bottom:3px}
+dl.facts dd{margin:0;font-size:13.5px;color:var(--tx2);line-height:1.45}
+dl.facts dd.okt{color:var(--ok)}dl.facts dd.warnt{color:var(--warn)}
+dl.facts .opt{display:inline-block;margin:0 6px 6px 0}
+table.mx td.on{color:var(--ok);font-size:13px;font-weight:600}
+.sty h3{font:600 14.5px/1.3 var(--sans);margin:10px 0 4px}
+.sty.rec .mk{outline:2px solid var(--gold);outline-offset:3px}
+.recb{font:400 10px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--gold);white-space:nowrap}
+.pc{list-style:none;margin:0;padding:0;font-size:13px;color:var(--tx2);line-height:1.4}
+.pc li{padding-left:16px;position:relative;margin:3px 0}
+.pc li::before{position:absolute;left:0;font-weight:600}
+.pc .pro::before{content:"+";color:var(--ok)}.pc .con::before{content:"−";color:var(--bad)}
+.cap2{font:400 10.5px var(--mono);color:var(--mut);margin:8px 0 0;text-align:center;text-transform:uppercase;letter-spacing:.08em}
+.mk{position:relative;aspect-ratio:9/16;border-radius:10px;overflow:hidden;border:1px solid var(--line2);background:#15120F}
+.mk img{display:block;width:100%}
+.mk .hd{font:400 16px/1.15 var(--serif);color:#EDE7DC;text-align:center;padding:9% 8% 6%}
+.mk.a img{height:100%;object-fit:cover;object-position:top}
+.mk.b{background:#1b1815}
+.mk.b .ph2{width:62%;margin:0 auto;border:5px solid #3a342e;border-radius:18px;overflow:hidden}
+.mk.c{background:linear-gradient(180deg,#221d18,#0d0b09)}
+.mk.c .scr{width:80%;margin:0 auto;border-radius:12px 12px 0 0;overflow:hidden;border:1px solid rgba(237,231,220,.2);border-bottom:0;box-shadow:0 10px 30px rgba(0,0,0,.7);height:100%}
+.mk.c .scr.need{display:flex;align-items:center;justify-content:center;text-align:center;border-style:dashed;box-shadow:none;height:62%;padding:10px;font:400 10.5px/1.5 var(--mono);color:var(--mut)}
+.mk.d{background:linear-gradient(140deg,#5b6b7a,#cbb89a 55%,#7a5d4a)}
+.mk.d .hd{color:#15120F;font-weight:600}
+.mk.d .ph2{width:56%;margin:4% auto 0;transform:rotate(-8deg);border:5px solid #111;border-radius:18px;overflow:hidden;box-shadow:0 18px 30px rgba(0,0,0,.5)}
+.fg{aspect-ratio:1024/500;display:grid;grid-template-columns:1.15fr 1fr;background:linear-gradient(135deg,#221d18,#0d0b09);border:1px solid var(--line2);border-radius:10px;overflow:hidden}
+.fgt{align-self:center;padding:0 7%}
+.fgt b{display:block;font:400 clamp(26px,3.6vw,46px)/1 var(--serif);margin-bottom:8px}
+.fgt span{font:400 clamp(13px,1.5vw,18px)/1.25 var(--serif);color:var(--gold)}
+.fgi{overflow:hidden}
+.fgi img{display:block;width:78%;margin:8% 0 0 12%;transform:rotate(7deg);border-radius:12px;box-shadow:0 14px 34px rgba(0,0,0,.7)}
+.listing{display:flex;gap:14px;align-items:flex-start}
+.li-ic{flex:none;width:56px;height:56px;border-radius:13px;background:var(--gold);color:#100E0C;font:400 34px/56px var(--serif);text-align:center}
+.listing b{display:block;font-size:17px}
+.listing p{margin:10px 0 0;font-size:14px;color:var(--tx2)}
+.cc{display:block;font:400 10.5px var(--mono);color:var(--mut);margin-top:2px}
+.vf{aspect-ratio:16/9;background:var(--el);border:1px solid var(--line2);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;justify-content:center;gap:6px}
+.vf b{font:400 10.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
+.vf span{font-size:13.5px;line-height:1.35;color:var(--tx)}
+.story h3{font-size:22px}
+
 /* ---------- infographics ---------- */
 .tile.good .n{color:var(--ok)}
 .dec{gap:4px 14px}.dec p{margin:0}.dec .alt{margin-top:2px}
@@ -372,7 +426,7 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
 <header class="top">
   <div class="brand">Fandex<span>Release plan</span></div>
   <nav>
-    <a href="#glance">At a glance</a><a href="#market">Market</a><a href="#strategy">The pitch</a><a href="#schedule">Schedule</a><a href="#assets">Assets</a><a href="#channels">Channels</a><a href="#admin">Admin</a><a href="#product">App</a><a href="#telemetry">Telemetry</a><a href="#goals">Goals</a><a href="#forgot">Risks</a><a href="#sources">Sources</a>
+    <a href="#glance">Overview</a><a href="#market">Market analysis</a><a href="#strategy">Marketing messages</a><a href="#schedule">Schedule</a><a href="#assets">Assets</a><a href="#channels">Channels</a><a href="#admin">Admin tasks</a><a href="#product">App work</a><a href="#telemetry">Telemetry</a><a href="#goals">Goals</a><a href="#forgot">Risks</a><a href="#sources">Sources</a>
   </nav>
   <button class="tbtn" id="btn-details" title="Shows or hides the detail line under every list row. A click on a row's title opens just that one.">Details</button>
   <button class="tbtn" id="btn-mode" title="Then click any chart, image, card or row. Shortcut: C">Comment on a block</button>
@@ -384,289 +438,281 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
 <main id="doc" data-cid="doc">
 
 <!-- ============================================================ AT A GLANCE -->
-<section id="glance" data-title="At a glance">
-  <div class="eyebrow">Fandex release plan · updated <span id="updated"></span></div>
-  <h1 data-cid="g-h1">Launch on Tuesday 16 February 2027.</h1>
-  <p class="sub" style="margin-top:12px;font-size:17px" data-cid="g-sub">The app goes live on Google Play and fandex.org gets its first outside links in the same week. Three stories carry it.</p>
+<section id="glance" data-title="Overview">
+  <div class="eyebrow">Updated <span id="updated"></span></div>
+  <h1 data-cid="g-h1">Fandex launch plan</h1>
+  <p class="sub" style="margin-top:12px;font-size:17px" data-cid="g-sub">Launch day is Tuesday 16 February 2027. On that day the Android app goes live on Google Play and we announce fandex.org. This page lists what has to happen before then, who does it, and which decisions are yours.</p>
 
-  <div class="grid g3" style="margin-top:18px" data-label="The three stories">
-    <a class="card mini" href="#strategy" data-cid="g-s1" data-label="Story 1"><span class="num">1</span><span><b>Rate your shows. Get your books.</b><small>One taste, across films, shows, games and books.</small></span></a>
-    <a class="card mini" href="#strategy" data-cid="g-s2" data-label="Story 2"><span class="num">2</span><span><b>Everything you're waiting for, on one calendar.</b><small>A nudge the morning it is out.</small></span></a>
-    <a class="card mini" href="#strategy" data-cid="g-s3" data-label="Story 3"><span class="num">3</span><span><b>A score that shows its working.</b><small>See why you will like it.</small></span></a>
+  <div class="grid g4" style="margin-top:18px">
+    <div class="card tile hl" data-cid="g-days"><div class="n" id="t-days">0</div><div class="l">days until launch day</div><div class="s" id="t-phase"></div></div>
+    <div class="card tile" data-cid="g-prog"><div class="n" id="t-pct">0%</div><div class="l">of all tasks are done</div><div class="s" id="t-count"></div></div>
+    <div class="card tile" data-cid="g-yours"><div class="n" id="t-nils">0</div><div class="l">open tasks that need you</div><div class="s" id="t-late"></div></div>
+    <div class="card" data-cid="g-areas"><div class="k2">Tasks done, per area</div><div id="areas"></div></div>
   </div>
 
-  <div class="grid g4" style="margin-top:14px">
-    <div class="card tile hl" data-cid="g-days"><div class="n" id="t-days">0</div><div class="l">days to launch</div><div class="s" id="t-phase"></div></div>
-    <div class="card tile" data-cid="g-prog"><div class="n" id="t-pct">0%</div><div class="l">of the plan done</div><div class="s" id="t-count"></div></div>
-    <div class="card tile" data-cid="g-yours"><div class="n" id="t-nils">0</div><div class="l">open items that need you</div><div class="s" id="t-late"></div></div>
-    <div class="card" data-cid="g-areas"><div id="areas"></div></div>
+  <h4>Decisions you need to make <span class="cnt">comment on a card, or set it to Done once decided</span></h4>
+  <div class="grid g2">
+    <div class="card dec" data-cid="d-date" data-label="Decision: launch day">
+      <h3>Is Tuesday 16 February 2027 the launch day?</h3><button class="pill" data-key="d-date" data-default="todo"></button>
+      <p class="ans">Decided: yes (you, 22 Nov).</p>
+      <p class="ctx">If the Play account is not ready in time, the fallback is Tuesday 9 March.</p></div>
+
+    <div class="card dec" data-cid="d-lead" data-label="Decision: marketing messages">
+      <h3>Does the marketing focus on your three messages?</h3><button class="pill" data-key="d-lead" data-default="todo"></button>
+      <p class="ans">Decided: yes (you, 22 Nov).</p>
+      <p class="ctx">The three messages and their wording are in the section "Marketing messages".</p></div>
+
+    <div class="card dec" data-cid="d-line" data-label="Decision: the slogan">
+      <h3>Which sentence is the main slogan?</h3><button class="pill" data-key="d-line" data-default="todo"></button>
+      <p class="ans">Decided for now: A (you, 22 Nov).</p>
+      <p class="ctx">One sentence that goes on the store page, in posts and in the video. You find the list of verbs not clean, so a better sentence may still replace it.</p>
+      <ul class="optl">
+        <li class="rec"><b>A.</b> "One taste. Everything you watch, play and read." <em>Chosen for now</em></li>
+        <li><b>B.</b> "One taste. Every screen and page."</li>
+        <li><b>C.</b> "One taste. Films, shows, games and books."</li>
+        <li><b>D.</b> "One taste. Every medium."</li>
+      </ul></div>
+
+    <div class="card dec" data-cid="d-art" data-label="Decision: covers in store images">
+      <h3>May the store images show real covers (film posters, game box art)?</h3><button class="pill" data-key="d-art" data-default="todo"></button>
+      <p class="ctx">Google Play's rules forbid copyrighted cover art in store images unless you have permission. Every Fandex screen is full of covers.</p>
+      <ul class="optl">
+        <li class="rec"><b>A. No.</b> The store images only show covers we are allowed to use: public-domain titles and titles whose makers said yes. Safe, more work. <em>My recommendation</em></li>
+        <li><b>B. Yes.</b> Show real covers, like Letterboxd and JustWatch do. Less work. Risk: Google rejects the store page.</li>
+      </ul>
+      <p class="ctx">This is about the store page only. Posts and videos elsewhere show the app as it is. I am not a lawyer.</p></div>
+
+    <div class="card dec" data-cid="d-trader" data-label="Decision: trader status">
+      <h3>Do you register on Google Play as a trader or as a non-trader?</h3><button class="pill" data-key="d-trader" data-default="todo"></button>
+      <p class="ctx">Google requires every developer to pick one by 1 February 2027.</p>
+      <ul class="optl">
+        <li class="rec"><b>A. Trader.</b> Correct if Fandex is a business, and ads are planned. Your address and phone number are shown on the store page. <em>My recommendation</em></li>
+        <li><b>B. Non-trader.</b> Address and phone stay private. Only correct while Fandex earns nothing, and it must be changed before the first ad.</li>
+      </ul></div>
+
+    <div class="card dec" data-cid="d-track" data-label="Decision: usage data">
+      <h3>How do we collect usage data?</h3><button class="pill" data-key="d-track" data-default="todo"></button>
+      <p class="ctx">You want to see what users do in the app. The details are in the section "Telemetry".</p>
+      <ul class="optl">
+        <li class="rec"><b>A. Our own counters.</b> We count events per day on our server. No user or device is identified. No consent popup needed. <em>My recommendation</em></li>
+        <li><b>B. An analytics tool</b> such as PostHog. More detail per user. Needs a consent popup on first start.</li>
+      </ul></div>
+
+    <div class="card dec" data-cid="d-social" data-label="Decision: social media">
+      <h3>Which social media do we use?</h3><button class="pill" data-key="d-social" data-default="todo"></button>
+      <ul class="optl">
+        <li class="rec"><b>A. Short videos only.</b> Two clips a week, the same clip on TikTok, Instagram Reels and YouTube Shorts. About two hours a week. <em>My recommendation</em></li>
+        <li><b>B. Short videos plus X or Bluesky.</b> More reach among developers, more time.</li>
+        <li><b>C. None.</b> Only Reddit, Hacker News and press.</li>
+      </ul></div>
+
+    <div class="card dec" data-cid="d-shots" data-label="Decision: store image style">
+      <h3>How should the store images look?</h3><button class="pill" data-key="d-shots" data-default="todo"></button>
+      <p class="ctx">Four styles are shown as pictures in the section "Assets to produce".</p>
+      <ul class="optl">
+        <li class="rec"><b>C.</b> A slogan on top, the screenshot below, on the app's dark background, no phone frame. <em>My recommendation</em></li>
+        <li><b>A, B or D.</b> Plain screenshot, phone frame, or photo background.</li>
+      </ul></div>
   </div>
 
-  <h4>The five phases</h4>
-  <div class="grid g5" id="phases"></div>
+  <h4>What blocks everything else</h4>
+  <div class="card" data-cid="g-block" style="border-color:rgba(240,160,75,.5)">
+    <h3>The D-U-N-S number has not arrived</h3>
+    <p class="ctx" style="margin-top:6px">Google needs this business number before it turns your account into an organization account. Without that account there is no store page.</p>
+    <div class="steps" style="margin-top:10px">
+      <span class="step done">Requested<small>5 Nov, done</small></span><span class="step now">Number arrives<small>expected by 15 Dec</small></span><span class="step">Account upgrade<small>then wait 72 hours</small></span><span class="step">Store page can be built<small>January</small></span>
+    </div>
+    <p class="ctx" style="margin-top:10px">If it is not here by 15 December, we keep the personal account. That route needs 12 testers for 14 days. Every week of delay moves launch day by a week.</p>
+  </div>
 
   <div class="grid g2" style="margin-top:14px">
     <div>
-      <h4>Next up for you</h4>
+      <h4>Your next tasks</h4>
       <div class="listbox" id="nextup"></div>
     </div>
     <div>
-      <h4>Everything waits on one thing</h4>
-      <div class="card" data-cid="g-block" style="border-color:rgba(240,160,75,.5)">
-        <h3>The D-U-N-S number</h3>
-        <div class="steps" style="margin-top:10px">
-          <span class="step done">Requested<small>5 Nov</small></span><span class="step now">Number arrives<small>by 15 Dec</small></span><span class="step">Account upgrade<small>plus 72 hours</small></span><span class="step">Store page<small>January</small></span>
-        </div>
-        <p class="small" style="margin-top:10px">Not here by 15 Dec: the personal route, 12 testers for 14 days. Every week late moves launch a week.</p>
-      </div>
-      <h4>Money</h4>
-      <div class="grid g3" data-cid="g-money" data-label="Money">
-        <div class="card tile good"><div class="n">€0</div><div class="l">needed</div></div>
-        <div class="card tile"><div class="n">€5</div><div class="l">a month, Workers Paid, from January</div></div>
-        <div class="card tile"><div class="n">€290</div><div class="l">the word mark, if the name search is clean</div></div>
+      <h4>Costs</h4>
+      <div class="grid g3" data-cid="g-money" data-label="Costs">
+        <div class="card tile good"><div class="n">€0</div><div class="l">has to be spent</div></div>
+        <div class="card tile"><div class="n">€5</div><div class="l">per month for the paid Cloudflare plan, from January. Recommended.</div></div>
+        <div class="card tile"><div class="n">€290</div><div class="l">once, to register "Fandex" as a trademark in Germany. Optional.</div></div>
       </div>
     </div>
   </div>
 
-  <h4>Decisions <span class="cnt">comment on one, or set it to Done to accept</span></h4>
-  <div class="grid g3">
-    <div class="card dec" data-cid="d-date" data-label="Decision: launch day"><h3>Launch day: Tue 16 Feb 2027</h3><button class="pill" data-key="d-date" data-default="todo"></button>
-      <p>Accepted on 22 Nov.</p><p class="alt">If the account slips: Tue 9 March.</p></div>
-    <div class="card dec" data-cid="d-lead" data-label="Decision: lead message"><h3>Lead with the three stories</h3><button class="pill" data-key="d-lead" data-default="todo"></button>
-      <p>Your direction, 22 Nov. Cross-media is the thread through all of them.</p><p class="alt">The wording is in the pitch section.</p></div>
-    <div class="card dec" data-cid="d-line" data-label="Decision: the one line"><h3>The line: "One taste. Everything you watch, play and read."</h3><button class="pill" data-key="d-line" data-default="todo"></button>
-      <p>For posts and the store. The site keeps "Your index of every game, movie, show &amp; book."</p><p class="alt">Two other options sit beside it in the pitch section.</p></div>
-    <div class="card dec" data-cid="d-art" data-label="Decision: cover art in store graphics"><h3>Store graphics show only covers we may use</h3><button class="pill" data-key="d-art" data-default="todo"></button>
-      <p>Play's copyright rule names cover art. Posts and clips show the app as it is.</p><p class="alt">My reading, not legal advice.</p></div>
-    <div class="card dec" data-cid="d-trader" data-label="Decision: trader status"><h3>Trader or non-trader</h3><button class="pill" data-key="d-trader" data-default="todo"></button>
-      <p>Open. Trader is the safer answer, and it puts your address and phone on the store page.</p><p class="alt">Decide in the upgrade sitting.</p></div>
-    <div class="card dec" data-cid="d-track" data-label="Decision: telemetry"><h3>Telemetry: counts, never ids</h3><button class="pill" data-key="d-track" data-default="todo"></button>
-      <p>Most of it from data the server already holds. The list is in the telemetry section.</p><p class="alt">Other option: a tool like PostHog behind a consent screen.</p></div>
-    <div class="card dec" data-cid="d-social" data-label="Decision: social scope"><h3>Short clips yes, X no, Product Hunt maybe</h3><button class="pill" data-key="d-social" data-default="todo"></button>
-      <p>Two clips a week on TikTok, Reels and Shorts. About two hours a week.</p><p class="alt">Product Hunt's median indie launch gets 3 upvotes.</p></div>
-  </div>
+  <h4>The five phases of the plan</h4>
+  <div class="grid g5" id="phases"></div>
 </section>
 
 <!-- ================================================================= MARKET -->
-<section id="market" data-title="Market">
-  <div class="eyebrow">Why now</div>
-  <h2>The market left a door open in 2026.</h2>
-  <p class="sub">The biggest show tracker closed, the second one doubled its price, and every large tracker still covers one medium. Numbers are the latest public ones. Sources are at the bottom.</p>
+<section id="market" data-title="Market analysis">
+  <h2>Market analysis</h2>
+  <p class="sub" data-cid="m-what">Who the competitors are, how big they are, and what changed recently. Conclusion: there is room for Fandex, mainly because the biggest show tracker closed in 2026 and the second one got expensive.</p>
 
-  <div class="grid g6" style="margin-top:20px">
-    <div class="card tile hl" data-cid="m-t1"><div class="n">25M+</div><div class="l">TV Time users when it shut down on 15 July 2026</div><div class="s">TechCrunch</div></div>
-    <div class="card tile" data-cid="m-t2"><div class="n">$30→$60</div><div class="l">Trakt VIP per year. Free watchlists capped at 100 titles</div><div class="s">Feb 2025</div></div>
-    <div class="card tile" data-cid="m-t3"><div class="n">72%</div><div class="l">of streamers want one guide across services, up from 66%</div><div class="s">Gracenote, 2026</div></div>
-    <div class="card tile" data-cid="m-t4"><div class="n">51%</div><div class="l">say too many services make things harder to find</div><div class="s">Gracenote, Aug 2026</div></div>
-    <div class="card tile" data-cid="m-t5"><div class="n">$69</div><div class="l">a month on 4 streaming services per US household</div><div class="s">Deloitte, 2025 to 26</div></div>
-    <div class="card tile" data-cid="m-t6"><div class="n">40%</div><div class="l">of fans wish their favourite things lived in one place</div><div class="s">Deloitte, Mar 2026</div></div>
+  <h4>Four facts that matter</h4>
+  <div class="grid g4">
+    <div class="card tile hl" data-cid="m-t1"><div class="n">25M</div><div class="l">people used TV Time, the biggest show tracker. It shut down on 15 July 2026.</div><div class="s">TechCrunch</div></div>
+    <div class="card tile" data-cid="m-t2"><div class="n">$60</div><div class="l">per year is what Trakt now charges, up from $30. Free accounts are capped at 100 watchlist titles.</div><div class="s">since Feb 2025</div></div>
+    <div class="card tile" data-cid="m-t3"><div class="n">72%</div><div class="l">of people who stream want one guide across all services. A year earlier it was 66%.</div><div class="s">Gracenote survey, 2026</div></div>
+    <div class="card tile" data-cid="m-t6"><div class="n">40%</div><div class="l">of fans wish the things they follow were in one place.</div><div class="s">Deloitte survey, Mar 2026</div></div>
   </div>
 
   <div class="grid g2" style="margin-top:14px">
-    <div class="card chart" data-cid="m-users" data-label="Chart: users per tracker">
-      <h3>Every big tracker covers one or two media</h3>
-      <div class="cs">Users in millions. Mixed measures (members or monthly users), latest public figure each.</div>
+    <div class="card chart" data-cid="m-users" data-label="Chart: users per competitor">
+      <h3>How many users each competitor has</h3>
+      <div class="cs">In millions. Each app covers only what is written under its name.</div>
       <div id="ch-users"></div>
-      <p class="small" style="margin-top:10px">Trakt, Simkl and Serializd publish no user numbers.</p>
+      <p class="small" style="margin-top:10px">Trakt, Simkl and Serializd do not publish user numbers.</p>
     </div>
-    <div class="card" data-cid="m-events" data-label="Timeline: the opening">
-      <h3 style="font-size:18px">What happened to the incumbents</h3>
-      <div class="cs small" style="margin-bottom:10px">Each one put users on the market.</div>
+    <div class="card" data-cid="m-events" data-label="Timeline: what happened to competitors">
+      <h3 style="font-size:18px">What happened to the competitors</h3>
+      <div class="cs small" style="margin-bottom:10px">Each event left users looking for another app.</div>
       <div class="tl">
-        <div class="ev" data-cid="m-ev1"><div class="dt">Feb 2025</div><div class="tx">Trakt caps free accounts at 100 watchlist titles and doubles VIP to $60 a year.</div></div>
-        <div class="ev" data-cid="m-ev2"><div class="dt">Jun 2025</div><div class="tx">Trakt ends its promised legacy prices. Rises of up to 300%.</div></div>
-        <div class="ev" data-cid="m-ev3"><div class="dt">Early 2026</div><div class="tx">Trakt limits free accounts to one connected app.</div></div>
-        <div class="ev" data-cid="m-ev4"><div class="dt">15 Jul 2026</div><div class="tx"><b>TV Time shuts down.</b> 25 million users look for a new home. Simkl's servers struggle with the rush.</div></div>
-        <div class="ev" data-cid="m-ev5"><div class="dt">Jul 2026</div><div class="tx">Letterboxd is up for sale at a reported $250M, with films alone. It says TV tracking is coming.</div></div>
-        <div class="ev" data-cid="m-ev6"><div class="dt">Aug 2026</div><div class="tx">A TV Time co-founder launches Bingers as its successor.</div></div>
+        <div class="ev" data-cid="m-ev1"><div class="dt">Feb 2025</div><div class="tx">Trakt limits free accounts to 100 watchlist titles and doubles its price to $60 a year.</div></div>
+        <div class="ev" data-cid="m-ev2"><div class="dt">Jun 2025</div><div class="tx">Trakt cancels the old prices it had promised to keep. Some users pay 300% more.</div></div>
+        <div class="ev" data-cid="m-ev4"><div class="dt">15 Jul 2026</div><div class="tx"><b>TV Time shuts down.</b> 25 million users need a new app.</div></div>
+        <div class="ev" data-cid="m-ev5"><div class="dt">Jul 2026</div><div class="tx">Letterboxd is put up for sale for a reported $250M. It only tracks films.</div></div>
+        <div class="ev" data-cid="m-ev6"><div class="dt">Aug 2026</div><div class="tx">A TV Time co-founder launches a successor app called Bingers.</div></div>
       </div>
     </div>
   </div>
 
-  <div class="grid g2" style="margin-top:14px">
-    <div class="card chart" data-cid="m-decide" data-label="Chart: time spent choosing">
-      <h3>Choosing what to watch takes longer every year</h3>
-      <div class="cs">Minutes per session. 2019 and 2023 are Nielsen; 2025 is a different survey.</div>
-      <div id="ch-decide"></div>
-    </div>
-    <div class="card chart" data-cid="m-steam" data-label="Chart: Steam releases">
-      <h3>And more comes out every year</h3>
-      <div class="cs">Games released on Steam per year (SteamDB).</div>
-      <div id="ch-steam"></div>
-    </div>
-  </div>
-
-  <div class="note" data-cid="m-against"><b>What cuts the other way.</b> A "Show HN: Letterboxd for Everything" got 3 points in November 2025. At least six new all-in-one trackers exist (Shelf, LaterRex, Logged, Monolog, Sequel, Bingers). TV Time said a free app could not pay for itself. So "all-in-one" does not win attention on its own, and people will ask how Fandex stays free.</div>
-
-  <h4>The field</h4>
+  <h4>The competitors compared</h4>
   <div class="card" style="padding:6px 8px" data-cid="m-table" data-label="Table: competitors">
     <table>
-      <tr><th>App</th><th>Covers</th><th>Users</th><th>Google Play</th><th>Paid tier</th><th>Release calendar or reminders</th></tr>
-      <tr class="us"><td>Fandex</td><td>Films, shows, games, books</td><td>Pre-launch</td><td>Not listed yet</td><td>None</td><td class="yes">Calendar, plus reminders for releases, new seasons, next episodes</td></tr>
-      <tr><td>Letterboxd</td><td>Films</td><td>30M+ (mid-2026)</td><td>10M+ installs, 3.3 stars</td><td>$19 to $49 a year</td><td class="no">None in its listing</td></tr>
-      <tr><td>Trakt</td><td>Shows, films</td><td>Not public</td><td>500K+, 4.1</td><td>$60 a year</td><td class="yes">Calendars, push when episodes air</td></tr>
-      <tr><td>JustWatch</td><td>Where to stream</td><td>50M+ monthly</td><td>10M+, 4.4</td><td>Not found</td><td>New-release timeline, availability alerts</td></tr>
-      <tr><td>Serializd</td><td>Shows</td><td>Not public</td><td>500K+, 4.4</td><td>Not found</td><td class="no">Not verified</td></tr>
-      <tr><td>Goodreads</td><td>Books</td><td>150M+ (2023)</td><td>10M+, 4.6</td><td>Free with ads</td><td class="no">Not verified</td></tr>
-      <tr><td>StoryGraph</td><td>Books</td><td>5M (Jan 2026)</td><td>1M+, 4.6</td><td>$50 a year</td><td class="no">Not verified</td></tr>
-      <tr><td>Backloggd</td><td>Games</td><td>650K+ (Dec 2025)</td><td>No app yet, beta by spring 2027</td><td>Not found</td><td class="no">Not verified</td></tr>
-      <tr><td>Sofa</td><td>Books, games, films, shows, podcasts</td><td>Not public</td><td>iPhone only</td><td>$30 to $50 a year</td><td class="no">Not verified</td></tr>
+      <tr><th>App</th><th>What it tracks</th><th>Users</th><th>On Google Play</th><th>Price</th><th>Release calendar or reminders</th></tr>
+      <tr class="us"><td>Fandex</td><td>Films, shows, games, books</td><td>Not launched</td><td>Not yet</td><td>Free</td><td class="yes">Yes: calendar and three kinds of reminder</td></tr>
+      <tr><td>Letterboxd</td><td>Films</td><td>30M+</td><td>10M+ installs, 3.3 stars</td><td>$19 to $49 a year</td><td class="no">None listed</td></tr>
+      <tr><td>Trakt</td><td>Shows, films</td><td>Not public</td><td>500K+ installs, 4.1 stars</td><td>$60 a year</td><td class="yes">Yes: calendar and episode alerts</td></tr>
+      <tr><td>JustWatch</td><td>Where to stream</td><td>50M+ a month</td><td>10M+ installs, 4.4 stars</td><td>Not found</td><td>New-release list, availability alerts</td></tr>
+      <tr><td>Goodreads</td><td>Books</td><td>150M+</td><td>10M+ installs, 4.6 stars</td><td>Free, with ads</td><td class="no">Not checked</td></tr>
+      <tr><td>StoryGraph</td><td>Books</td><td>5M</td><td>1M+ installs, 4.6 stars</td><td>$50 a year</td><td class="no">Not checked</td></tr>
+      <tr><td>Backloggd</td><td>Games</td><td>650K+</td><td>No app yet</td><td>Not found</td><td class="no">Not checked</td></tr>
+      <tr><td>Sofa</td><td>Books, games, films, shows, podcasts</td><td>Not public</td><td>iPhone only</td><td>$30 to $50 a year</td><td class="no">Not checked</td></tr>
     </table>
   </div>
+
+  <div class="note" data-cid="m-against"><b>Arguments against.</b> Other apps already promise "everything in one place": Sofa, Shelf, LaterRex, Logged, Monolog, Sequel. A Hacker News post with exactly that pitch got 3 votes. And TV Time said it closed because a free app could not pay for itself, so people will ask how Fandex stays free.</div>
 </section>
 
 <!-- =============================================================== STRATEGY -->
-<section id="strategy" data-title="The pitch">
-  <div class="eyebrow">The pitch</div>
-  <h2>One taste. Everything you watch, play and read.</h2>
-  <p class="sub" data-cid="s-pos">Three stories, and the same idea under each: what you like in one medium tells Fandex what you will like in the others.</p>
+<section id="strategy" data-title="Marketing messages">
+  <h2>Marketing messages</h2>
+  <p class="sub" data-cid="s-pos">The three messages all marketing should focus on, with the wording to use. They are your three user stories. What connects them: Fandex learns your taste in one kind of media and uses it for all the others.</p>
 
-  <div class="roof" style="margin-top:18px;border-radius:14px" data-cid="s-roof" data-label="The one line">
-    <div class="eyebrow">The one line</div><div class="big">One taste. Everything you watch, play and read.</div>
-    <div class="opts" style="justify-content:center;margin-top:12px"><span class="opt-l">or</span><span class="opt" data-cid="s-roof-b">"One taste. Every screen and page."</span><span class="opt" data-cid="s-roof-c">"One taste. Films, shows, games and books."</span><span class="opt" data-cid="s-roof-d">"One taste. Every medium."</span></div>
+  <div class="grid g3" style="margin-top:18px;align-items:stretch">
+    <div class="card story" data-cid="st-1" data-label="Message 1">
+      <div class="k"><span class="num">1</span>Message 1</div>
+      <h3>Rate your shows. Get your books.</h3>
+      <dl class="facts">
+        <dt>What it means</dt><dd data-cid="st-1-means">Fandex recommends titles in one kind of media based on what you rated in another. One score, one set of data.</dd>
+        <dt>Why it is true</dt><dd data-cid="st-1-proof">Measured on your library: 99% of what scores a book you have not rated comes from your films, shows and games.</dd>
+        <dt>Problem</dt><dd data-cid="st-1-owed" class="warnt">The app does not show this anywhere yet. You parked the fix on 22 Nov.</dd>
+        <dt>Other wordings</dt><dd><span class="opt" data-cid="st-1-b">"Your taste doesn't stop at one medium."</span><span class="opt" data-cid="st-1-c">"Loved a show? Here is your next book."</span></dd>
+      </dl>
+    </div>
+    <div class="card story" data-cid="st-2" data-label="Message 2">
+      <div class="k"><span class="num">2</span>Message 2</div>
+      <h3>Everything you're waiting for, on one calendar.</h3>
+      <dl class="facts">
+        <dt>What it means</dt><dd data-cid="st-2-means">One calendar with the release dates of films, shows, games and books, and a notification on the day one comes out.</dd>
+        <dt>Why it is true</dt><dd data-cid="st-2-proof">The app sends a reminder at 09:00 for a wishlisted release, a new season and the next episode.</dd>
+        <dt>Status</dt><dd data-cid="st-2-chosen" class="okt">Wording chosen by you on 22 Nov. Use it on store images.</dd>
+        <dt>Other wordings</dt><dd><span class="opt" data-cid="st-2-b">"A nudge the morning it's out."</span><span class="opt" data-cid="st-2-c">"Book, show, game or film: never miss release day."</span></dd>
+      </dl>
+    </div>
+    <div class="card story" data-cid="st-3" data-label="Message 3">
+      <div class="k"><span class="num">3</span>Message 3</div>
+      <h3>A score that shows its working.</h3>
+      <dl class="facts">
+        <dt>What it means</dt><dd data-cid="st-3-means">Every score can be opened to see what raised or lowered it. Insights shows your taste by tag, person, studio and era.</dd>
+        <dt>Why it is true</dt><dd data-cid="st-3-proof">The "Why?" sheet exists on every title. Only your own ratings count, never other people's.</dd>
+        <dt>Other wordings</dt><dd><span class="opt" data-cid="st-3-b">"See why you'll like it."</span><span class="opt" data-cid="st-3-c">"Your taste, in numbers you can check."</span></dd>
+      </dl>
+    </div>
   </div>
 
-  <div class="grid g3" style="margin-top:14px;align-items:stretch">
-
-    <!-- story 1 -->
-    <div class="card story" data-cid="st-1" data-label="Story 1: taste that travels">
-      <div class="k"><span class="num">1</span>Taste that travels</div>
-      <h3>Rate your shows. Get your books.</h3>
-      <div class="viz" data-cid="st-1-viz" data-label="Story 1: how it works">
-        <div class="vcol"><h5>You rate</h5><span class="chip m-show"><i></i>Severance · 9</span><span class="chip m-show"><i></i>Dark · 9</span><span class="chip m-show"><i></i>Silo · 8</span></div>
-        <div class="varr">→</div>
-        <div class="vcol"><h5>Fandex learns</h5><span class="chip plus">mystery</span><span class="chip plus">dystopia</span><span class="chip plus">slow burn</span></div>
-        <div class="varr">→</div>
-        <div class="vcol"><h5>You get</h5><span class="chip m-book"><i></i>a novel · 84</span><span class="chip m-game"><i></i>a game · 79</span><span class="chip m-movie"><i></i>a film · 77</span></div>
-      </div>
-      <div class="small" style="text-align:center">Illustration. The numbers are examples.</div>
-      <div class="opts"><span class="opt-l">or</span><span class="opt" data-cid="st-1-b">"Your taste doesn't stop at one medium."</span><span class="opt" data-cid="st-1-c">"Loved a show? Here is your next book."</span></div>
-      <div class="pf" data-cid="st-1-proof"><b>Proof.</b> Measured on your own library: 99% of what scores an unrated book comes from your films, shows and games.</div>
-      <div class="pf owed" data-cid="st-1-owed"><b>Still owed.</b> The app does not say this on screen yet. The Why sheet should name the media behind a number.</div>
-    </div>
-
-    <!-- story 2 -->
-    <div class="card story" data-cid="st-2" data-label="Story 2: one calendar">
-      <div class="k"><span class="num">2</span>One calendar</div>
-      <h3>Everything you're waiting for, on one calendar.</h3>
-      <div class="week" data-cid="st-2-viz" data-label="Story 2: a week">
-        <div class="day"><b>Mon</b></div>
-        <div class="day"><b>Tue</b><span class="m-movie"><i></i></span></div>
-        <div class="day"><b>Wed</b></div>
-        <div class="day"><b>Thu</b><span class="m-game"><i></i></span></div>
-        <div class="day"><b>Fri</b><span class="m-show"><i></i></span></div>
-        <div class="day"><b>Sat</b></div>
-        <div class="day"><b>Sun</b><span class="m-book"><i></i></span></div>
-        <div class="wkey"><span class="chip m-movie"><i></i>a film</span><span class="chip m-game"><i></i>a game</span><span class="chip m-show"><i></i>a new season</span><span class="chip m-book"><i></i>a book</span></div>
-      </div>
-      <div class="notif" data-cid="st-2-notif" data-label="Story 2: the reminder"><span class="ic">F</span><span><small>Fandex · 09:00</small><b>Out today: the game on your wishlist</b><em>Tap to open it.</em></span></div>
-      <div class="opts"><span class="opt-l">or</span><span class="opt" data-cid="st-2-b">"A nudge the morning it's out."</span><span class="opt" data-cid="st-2-c">"Book, show, game or film: never miss release day."</span></div>
-      <div class="pf chosen" data-cid="st-2-chosen"><b>Chosen, 22 Nov.</b> This line goes on store screenshot 2 and the feature graphic.</div>
-      <div class="pf" data-cid="st-2-proof"><b>Proof.</b> Three reminders at 09:00: a wishlisted release, a new season, the next episode.</div>
-      <div class="pf owed" data-cid="st-2-owed"><b>Still owed.</b> You have not yet seen one arrive on your phone.</div>
-    </div>
-
-    <!-- story 3 -->
-    <div class="card story" data-cid="st-3" data-label="Story 3: a score you can read">
-      <div class="k"><span class="num">3</span>A score you can read</div>
-      <h3>A score that shows its working.</h3>
-      <div class="wf" data-cid="st-3-viz" data-label="Story 3: what moves a score">
-        <div class="wr"><span>Your average for shows</span><div class="wt"><i style="left:0;width:72%"></i></div><b>72</b></div>
-        <div class="wr up"><span>Tags you rate high</span><div class="wt"><i style="left:72%;width:7%"></i></div><b>+7</b></div>
-        <div class="wr up"><span>A writer you rate 8.6</span><div class="wt"><i style="left:79%;width:5%"></i></div><b>+5</b></div>
-        <div class="wr dn"><span>A studio you rate low</span><div class="wt"><i style="left:82%;width:2%"></i></div><b>−2</b></div>
-        <div class="wr sum"><span>Your Fandex Score</span><div class="wt"><i style="left:0;width:82%"></i></div><b>82</b></div>
-      </div>
-      <div class="small" style="text-align:center">Illustration. This is what "Why?" shows for a title.</div>
-      <div class="opts"><span class="opt-l">or</span><span class="opt" data-cid="st-3-b">"See why you'll like it."</span><span class="opt" data-cid="st-3-c">"Your taste, in numbers you can check."</span></div>
-      <div class="pf" data-cid="st-3-proof"><b>Proof.</b> Only your own ratings count, never the crowd's. Insights shows your taste by tag, person, studio and era.</div>
-    </div>
+  <h4>The slogan</h4>
+  <div class="card" data-cid="s-roof" data-label="The slogan">
+    <p class="ctx">One sentence above the three messages, for the store page, posts and the video. You chose A for now (22 Nov). The website keeps its current line, "Your index of every game, movie, show &amp; book."</p>
+    <ul class="optl">
+      <li class="rec" data-cid="s-roof-a"><b>A.</b> "One taste. Everything you watch, play and read." <em>Chosen for now</em></li>
+      <li data-cid="s-roof-b"><b>B.</b> "One taste. Every screen and page."</li>
+      <li data-cid="s-roof-c"><b>C.</b> "One taste. Films, shows, games and books."</li>
+      <li data-cid="s-roof-d"><b>D.</b> "One taste. Every medium."</li>
+    </ul>
   </div>
 
   <div class="grid g2" style="margin-top:14px">
     <div>
-      <h4>Which feature proves which story</h4>
-      <div class="card" style="padding:6px 8px" data-cid="s-matrix" data-label="Matrix: features and stories">
+      <h4>Which app feature backs which message</h4>
+      <div class="card" style="padding:6px 8px" data-cid="s-matrix" data-label="Table: features and messages">
         <table class="mx">
-          <tr><th>Feature</th><th>1 · Taste</th><th>2 · Calendar</th><th>3 · Score</th></tr>
-          <tr><td>Recommended for you</td><td class="on">●</td><td></td><td></td></tr>
-          <tr><td>The score on every title</td><td class="on">●</td><td></td><td class="on">●</td></tr>
-          <tr><td>The Why sheet</td><td class="half">○</td><td></td><td class="on">●</td></tr>
-          <tr><td>Insights</td><td></td><td></td><td class="on">●</td></tr>
-          <tr><td>Release calendar</td><td></td><td class="on">●</td><td></td></tr>
-          <tr><td>Release reminders</td><td></td><td class="on">●</td><td></td></tr>
-          <tr><td>Up next and the widget</td><td></td><td class="half">○</td><td></td></tr>
-          <tr><td>One search, four media</td><td class="half">○</td><td class="half">○</td><td></td></tr>
-          <tr><td>Trakt and Steam sync, list import</td><td class="half">○</td><td></td><td class="half">○</td></tr>
+          <tr><th>Feature in the app</th><th>Message 1</th><th>Message 2</th><th>Message 3</th></tr>
+          <tr><td>Recommended for you</td><td class="on">yes</td><td></td><td></td></tr>
+          <tr><td>The score on every title</td><td class="on">yes</td><td></td><td class="on">yes</td></tr>
+          <tr><td>The "Why?" sheet</td><td></td><td></td><td class="on">yes</td></tr>
+          <tr><td>Insights</td><td></td><td></td><td class="on">yes</td></tr>
+          <tr><td>Release calendar</td><td></td><td class="on">yes</td><td></td></tr>
+          <tr><td>Release reminders</td><td></td><td class="on">yes</td><td></td></tr>
+          <tr><td>Up next and the widget</td><td></td><td class="on">yes</td><td></td></tr>
         </table>
-        <div class="legend" style="padding:8px 10px"><span>● proves it</span><span>○ feeds it</span></div>
       </div>
     </div>
     <div>
-      <h4>Words</h4>
+      <h4>Words to use and words to avoid</h4>
       <div class="grid g2">
-        <div class="card say" data-cid="s-say"><h3 style="font-size:17px">Say</h3><ul>
+        <div class="card say" data-cid="s-say"><h3 style="font-size:17px">Use</h3><ul>
           <li>"I built this."</li><li>"Free."</li><li>"From your own ratings."</li><li>"Syncs with Trakt and Steam."</li><li>"Export everything."</li></ul></div>
-        <div class="card dont" data-cid="s-dont"><h3 style="font-size:17px">Don't say</h3><ul>
-          <li>"No ads, ever."</li><li>"AI-powered."</li><li>"Best", "#1".</li><li>What it costs to run.</li><li>"Official" for Trakt, Steam, TMDB.</li></ul></div>
+        <div class="card dont" data-cid="s-dont"><h3 style="font-size:17px">Avoid</h3><ul>
+          <li>"No ads, ever." You plan ads later.</li><li>"AI-powered." TV Time closed "to focus on AI".</li><li>"Best", "#1". Google Play rejects them.</li><li>Any figure for running costs.</li><li>"Official" next to Trakt, Steam or TMDB.</li></ul></div>
       </div>
-      <h4>Where Fandex sits</h4>
-      <div class="map" style="height:230px;margin-left:0" data-cid="s-map" data-label="Positioning map">
-        <span class="ax" style="left:10px;bottom:8px">one medium</span><span class="ax" style="right:10px;bottom:8px">many media →</span>
-        <span class="ax" style="left:10px;top:8px">↑ looks ahead</span>
-        <div class="dot abs" style="left:8%;top:76%" data-tip="Films, books, games and shows, one each. No calendar found in their listings."><i></i>Letterboxd · Goodreads · Backloggd</div>
-        <div class="dot abs" style="left:36%;top:24%" data-tip="Shows and films. Calendars and push when episodes air."><i></i>Trakt</div>
-        <div class="dot abs" style="left:34%;top:50%" data-tip="Shows and films. New-release timeline and availability alerts."><i></i>JustWatch</div>
-        <div class="dot abs" style="left:84%;top:80%" data-tip="Five media, iPhone only. Calendar not verified."><i></i>Sofa ?</div>
-        <div class="dot abs us" style="left:76%;top:22%" data-tip="Four media, a calendar and three kinds of reminder."><i></i>Fandex</div>
-      </div>
-      <p class="small">My read. "?" means unchecked.</p>
     </div>
   </div>
 
   <h4>Who it is for, in order</h4>
-  <div class="auds" data-cid="s-auds" data-label="Audiences">
-    <div class="card aud" data-cid="s-a1" data-label="Audience 1: stranded show trackers">
-      <div class="who"><div class="rank">1 · Start here</div><h3>Stranded show trackers</h3><div class="q">"Your shows already know which books you'll love."</div></div>
-      <div class="f"><b>Who</b>Ex TV Time users, capped Trakt users.</div>
-      <div class="f"><b>How many</b>25M lost their app in July 2026.</div>
-      <div class="f"><b>Story</b>1, then 2.</div>
-      <div class="f"><b>Find them</b>AlternativeTo, r/trakt.</div></div>
-    <div class="card aud" data-cid="s-a2" data-label="Audience 2: multi-medium fans">
-      <div class="who"><div class="rank">2 · The core</div><h3>Four-app jugglers</h3><div class="q">"One taste. Everything you watch, play and read."</div></div>
-      <div class="f"><b>Who</b>Letterboxd plus a show app plus Goodreads.</div>
+  <p class="sub" style="margin-bottom:10px">The groups of people to reach, most important first, and which message to use for each.</p>
+  <div class="auds" data-cid="s-auds" data-label="Target groups">
+    <div class="card aud" data-cid="s-a1" data-label="Target group 1">
+      <div class="who"><div class="rank">Group 1 · most important</div><h3>People who lost their show tracker</h3></div>
+      <div class="f"><b>Who</b>Former TV Time users, and Trakt users who hit the free limit.</div>
+      <div class="f"><b>How many</b>25M lost TV Time in July 2026.</div>
+      <div class="f"><b>Message</b>1, then 2.</div>
+      <div class="f"><b>Where to reach them</b>AlternativeTo, r/trakt.</div></div>
+    <div class="card aud" data-cid="s-a2" data-label="Target group 2">
+      <div class="who"><div class="rank">Group 2</div><h3>People who use several tracking apps</h3></div>
+      <div class="f"><b>Who</b>Letterboxd for films, another app for shows, Goodreads for books.</div>
       <div class="f"><b>How many</b>40% of fans want one place.</div>
-      <div class="f"><b>Story</b>1.</div>
-      <div class="f"><b>Find them</b>r/SideProject, r/Android, Show HN.</div></div>
-    <div class="card aud" data-cid="s-a3" data-label="Audience 3: release watchers">
-      <div class="who"><div class="rank">3</div><h3>Release watchers</h3><div class="q">"Never miss a release day."</div></div>
-      <div class="f"><b>Who</b>Gamers and film fans who follow what is coming.</div>
-      <div class="f"><b>How many</b>20,000 Steam releases a year.</div>
-      <div class="f"><b>Story</b>2.</div>
-      <div class="f"><b>Find them</b>Clips timed to big releases.</div></div>
-    <div class="card aud" data-cid="s-a4" data-label="Audience 4: taste people">
-      <div class="who"><div class="rank">4</div><h3>Taste and stats people</h3><div class="q">"A score that shows its working."</div></div>
-      <div class="f"><b>Who</b>Fans of Letterboxd stats and year-end wraps.</div>
+      <div class="f"><b>Message</b>1.</div>
+      <div class="f"><b>Where to reach them</b>r/SideProject, r/Android, Hacker News.</div></div>
+    <div class="card aud" data-cid="s-a3" data-label="Target group 3">
+      <div class="who"><div class="rank">Group 3</div><h3>People who follow upcoming releases</h3></div>
+      <div class="f"><b>Who</b>Gamers and film fans who want to know what is coming.</div>
+      <div class="f"><b>How many</b>20,000 games a year come out on Steam alone.</div>
+      <div class="f"><b>Message</b>2.</div>
+      <div class="f"><b>Where to reach them</b>Short videos posted around big releases.</div></div>
+    <div class="card aud" data-cid="s-a4" data-label="Target group 4">
+      <div class="who"><div class="rank">Group 4</div><h3>People who like statistics about their taste</h3></div>
+      <div class="f"><b>Who</b>Fans of Letterboxd stats and yearly summaries.</div>
       <div class="f"><b>How many</b>Letterboxd has 30M members.</div>
-      <div class="f"><b>Story</b>3.</div>
-      <div class="f"><b>Find them</b>r/letterboxd, Show HN.</div></div>
-    <div class="card aud" data-cid="s-a5" data-label="Audience 5: German speakers">
-      <div class="who"><div class="rank">5 · Home market</div><h3>German speakers</h3><div class="q">"Titel auf Deutsch, Starttermine für Deutschland."</div></div>
+      <div class="f"><b>Message</b>3.</div>
+      <div class="f"><b>Where to reach them</b>r/letterboxd, Hacker News.</div></div>
+    <div class="card aud" data-cid="s-a5" data-label="Target group 5">
+      <div class="who"><div class="rank">Group 5</div><h3>German speakers</h3></div>
       <div class="f"><b>Who</b>Readers of German Android blogs.</div>
-      <div class="f"><b>How many</b>Small, and easier to reach.</div>
-      <div class="f"><b>Story</b>2.</div>
-      <div class="f"><b>Find them</b>mobiFlip, Caschys Blog, SmartDroid.</div></div>
+      <div class="f"><b>How many</b>A small group, but easy to reach.</div>
+      <div class="f"><b>Message</b>2, in German: titles in German, release dates for Germany.</div>
+      <div class="f"><b>Where to reach them</b>mobiFlip, Caschys Blog, SmartDroid.</div></div>
   </div>
 </section>
 
 <!-- =============================================================== SCHEDULE -->
 <section id="schedule" data-title="Schedule">
-  <div class="eyebrow">When</div>
-  <h2>Twelve weeks to launch, ten weeks after.</h2>
-  <p class="sub">Dates assume the D-U-N-S number arrives by mid-December. The grey marks are dates to stay clear of.</p>
-  <div class="card" data-cid="sc-gantt" data-label="Timeline">
+  <h2>Schedule</h2>
+  <p class="sub" data-cid="sc-what">What happens when, from today until ten weeks after launch. The dates only hold if the D-U-N-S number arrives by mid-December.</p>
+  <div class="card" style="margin-top:14px" data-cid="sc-gantt" data-label="Timeline">
     <div class="gantt" id="gantt"></div>
-    <div class="legend"><span><i style="background:var(--gold)"></i>A hook to ride</span><span><i style="background:#6F665A"></i>Stay clear</span><span><i style="background:var(--bad)"></i>Deadline</span><span><i style="background:var(--ok)"></i>Launch</span></div>
+    <div class="legend"><span><i style="background:var(--gold)"></i>An event we can tie a post to</span><span><i style="background:#6F665A"></i>Dates to avoid</span><span><i style="background:var(--bad)"></i>Deadline</span><span><i style="background:var(--ok)"></i>Launch</span></div>
     <div class="hooks" id="hooks"></div>
   </div>
 
@@ -674,259 +720,274 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
   <div class="card" style="padding:6px 8px" data-label="Launch week">
     <table id="lw"></table>
   </div>
-  <p class="small" style="margin-top:10px" data-cid="sc-rules">Rules for the week: one place a day, never the same link in two subs on one day, answer every comment within hours, and nothing new ships on launch day itself.</p>
+  <p class="small" style="margin-top:10px" data-cid="sc-rules">Rules for that week: one place per day, never the same link in two subreddits on one day, answer every comment within hours, and no new app version on launch day.</p>
 </section>
 
 <!-- ================================================================= ASSETS -->
-<section id="assets" data-title="Assets">
-  <div class="eyebrow">What we make</div>
-  <h2>Assets.</h2>
-  <p class="sub">Everything a post, a store page or a journalist needs. Click a status to change it.</p>
+<section id="assets" data-title="Assets to produce">
+  <h2>Assets to produce</h2>
+  <p class="sub" data-cid="as-what">Everything we have to make before launch: the store images, the banner, the video, the store texts and the website pages. The store images come first, because their look is a design decision you have to make.</p>
 
-  <h4>Store screenshots: the storyboard</h4>
-  <div class="shots" data-label="Screenshot storyboard">
-    <div class="shot" data-cid="sb-1" data-label="Screenshot 1"><div class="no">1 · story 1</div><div class="cap">Rate your shows. Get your books.</div><div class="ph need">to capture: Recommended with books in it, signed in</div></div>
-    <div class="shot" data-cid="sb-2" data-label="Screenshot 2"><div class="no">2 · story 2</div><div class="cap">Everything you're waiting for, on one calendar.</div><div class="ph"><img src="img/calendar.jpg" alt="Fandex calendar for November 2026 with a cover on each release day"></div></div>
-    <div class="shot" data-cid="sb-3" data-label="Screenshot 3"><div class="no">3 · story 2</div><div class="cap">A nudge the morning it's out.</div><div class="ph need">to capture: a reminder on the lock screen</div></div>
-    <div class="shot" data-cid="sb-4" data-label="Screenshot 4"><div class="no">4 · story 3</div><div class="cap">A score made from your own ratings.</div><div class="ph"><img src="img/title.jpg" alt="Fandex title page for a show with rating circles and the score seal"></div></div>
-    <div class="shot" data-cid="sb-5" data-label="Screenshot 5"><div class="no">5 · story 3</div><div class="cap">And it shows its working.</div><div class="ph need">to capture: the Why sheet, signed in</div></div>
-    <div class="shot" data-cid="sb-6" data-label="Screenshot 6"><div class="no">6 · story 3</div><div class="cap">Your taste, in numbers.</div><div class="ph need">to capture: Insights, signed in</div></div>
-    <div class="shot" data-cid="sb-7" data-label="Screenshot 7"><div class="no">7</div><div class="cap">Films, shows, games and books. One app.</div><div class="ph"><img src="img/home.jpg" alt="Fandex home screen with Popular right now and Upcoming rails"></div></div>
-    <div class="shot" data-cid="sb-8" data-label="Screenshot 8"><div class="no">8</div><div class="cap">Bring your Trakt, Steam and Letterboxd history.</div><div class="ph need">to capture: the import screen</div></div>
+  <h4>1. Which style should the store images have?</h4>
+  <p class="sub" style="margin-bottom:12px">Google Play shows up to eight upright images on the store page. Here is the same screen in four styles. Pick one.</p>
+  <div class="grid g4" data-label="Store image styles">
+    <div class="sty" data-cid="as-sty-a" data-label="Style A: screenshot only">
+      <div class="mk a"><img src="img/calendar.jpg" alt="Style A: the calendar screenshot filling the whole image"></div>
+      <h3>A. Screenshot only</h3>
+      <ul class="pc"><li class="pro">No design work.</li><li class="con">No message. A stranger does not know what the screen is for.</li></ul></div>
+    <div class="sty" data-cid="as-sty-b" data-label="Style B: phone frame">
+      <div class="mk b"><div class="hd">Everything you're waiting for, on one calendar.</div><div class="ph2"><img src="img/calendar.jpg" alt="Style B: the screenshot inside a drawn phone, with a slogan above"></div></div>
+      <h3>B. Slogan and a phone frame</h3>
+      <ul class="pc"><li class="pro">Clearly an app. Has a message.</li><li class="con">The screen gets small. Google advises against phone frames for apps it features.</li></ul></div>
+    <div class="sty rec" data-cid="as-sty-c" data-label="Style C: slogan and screenshot">
+      <div class="mk c"><div class="hd">Everything you're waiting for, on one calendar.</div><div class="scr"><img src="img/calendar.jpg" alt="Style C: a slogan on top and the screenshot below on a dark background, without a phone frame"></div></div>
+      <h3>C. Slogan and screenshot, no frame <span class="recb">recommended</span></h3>
+      <ul class="pc"><li class="pro">Message on top, big screen below. Background is the app's own dark colour. What Letterboxd, Trakt and JustWatch do.</li><li class="con">The screen is cut off at the bottom.</li></ul></div>
+    <div class="sty" data-cid="as-sty-d" data-label="Style D: photo background">
+      <div class="mk d"><div class="hd">Everything you're waiting for, on one calendar.</div><div class="ph2"><img src="img/calendar.jpg" alt="Style D: a tilted phone on a photo-like background"></div></div>
+      <h3>D. Phone on a photo background</h3>
+      <ul class="pc"><li class="pro">Looks like an advert.</li><li class="con">Most work. Needs photos. Reads as stock imagery, and hides the app.</li></ul></div>
   </div>
-  <p class="small" style="margin-top:10px" data-cid="sb-note">The order follows the three stories. The three pictures are today's live site, signed out. The final set comes from the phone, with the demo account and cleared covers. Play wants 1080 x 1920, at least four, no "best" or "free", no badges, no device frames.</p>
+  <p class="small" style="margin-top:10px" data-cid="as-bench">Google's rules for these images: 1080 x 1920 pixels, at least four, no words like "best" or "free", no store badges. The coloured background in D is only a stand-in for a photo.</p>
 
-  <div class="card" style="padding:6px 8px;margin-top:14px" data-cid="as-bench" data-label="Table: competitor store listings">
-    <table>
-      <tr><th>What the big three show first</th><th>Title</th><th>Screenshot 1</th><th>Screenshot 2</th><th>Screenshot 3</th></tr>
-      <tr><td><a href="https://play.google.com/store/apps/details?id=com.letterboxd.letterboxd" target="_blank" rel="noopener">Letterboxd</a></td><td>Letterboxd</td><td>"The best social film tracking and discovery, on Android"</td><td>"See the overview, trailer, ratings and reviews for popular films"</td><td>"Search for old favorites and new releases in our database"</td></tr>
-      <tr><td><a href="https://play.google.com/store/apps/details?id=tv.trakt.trakt" target="_blank" rel="noopener">Trakt</a></td><td>trakt.TV Shows &amp; Movies</td><td>Logo, "discover. track. share."</td><td>"Track Shows &amp; Movies"</td><td>"Get all the Details"</td></tr>
-      <tr><td><a href="https://play.google.com/store/apps/details?id=com.justwatch.justwatch" target="_blank" rel="noopener">JustWatch</a></td><td>JustWatch - Streaming Guide</td><td>"Stop scrolling. Start watching."</td><td>"Watch movies for free, right here."</td><td>"Your guide to streaming."</td></tr>
-    </table>
-    <p class="small" style="padding:8px 10px 4px">All three: one short benefit line per picture on a dark background. Open the links to see them.</p>
+  <h4>2. The eight store images</h4>
+  <p class="sub" style="margin-bottom:12px">Shown in style C. Each has one sentence. Four screens still have to be captured on the phone.</p>
+  <div class="grid g4" data-label="The eight store images">
+    <div class="sty" data-cid="sb-1" data-label="Store image 1"><div class="mk c"><div class="hd">Rate your shows. Get your books.</div><div class="scr need">To capture: the Recommended row with books in it</div></div><p class="cap2">1 · message 1</p></div>
+    <div class="sty" data-cid="sb-2" data-label="Store image 2"><div class="mk c"><div class="hd">Everything you're waiting for, on one calendar.</div><div class="scr"><img src="img/calendar.jpg" alt="The calendar for one month"></div></div><p class="cap2">2 · message 2</p></div>
+    <div class="sty" data-cid="sb-3" data-label="Store image 3"><div class="mk c"><div class="hd">A reminder on the day it comes out.</div><div class="scr need">To capture: a reminder on the lock screen</div></div><p class="cap2">3 · message 2</p></div>
+    <div class="sty" data-cid="sb-4" data-label="Store image 4"><div class="mk c"><div class="hd">A score made from your own ratings.</div><div class="scr"><img src="img/title.jpg" alt="A title page with the score"></div></div><p class="cap2">4 · message 3</p></div>
+    <div class="sty" data-cid="sb-5" data-label="Store image 5"><div class="mk c"><div class="hd">See what moved the score.</div><div class="scr need">To capture: the "Why?" sheet</div></div><p class="cap2">5 · message 3</p></div>
+    <div class="sty" data-cid="sb-6" data-label="Store image 6"><div class="mk c"><div class="hd">Your taste in numbers.</div><div class="scr need">To capture: Insights</div></div><p class="cap2">6 · message 3</p></div>
+    <div class="sty" data-cid="sb-7" data-label="Store image 7"><div class="mk c"><div class="hd">Films, shows, games and books in one app.</div><div class="scr"><img src="img/home.jpg" alt="The home screen"></div></div><p class="cap2">7 · what it is</p></div>
+    <div class="sty" data-cid="sb-8" data-label="Store image 8"><div class="mk c"><div class="hd">Bring your Trakt, Steam and Letterboxd history.</div><div class="scr need">To capture: the import screen</div></div><p class="cap2">8 · switching</p></div>
+  </div>
+  <p class="small" style="margin-top:10px" data-cid="sb-note">The screens shown here are from the live website with real covers. The final images depend on your decision about covers (see "Decisions").</p>
+
+  <div class="grid g2" style="margin-top:14px">
+    <div>
+      <h4>3. The banner at the top of the store page</h4>
+      <div class="fg" data-cid="as-fg" data-label="Banner mock"><div class="fgt"><b>Fandex</b><span>Everything you're waiting for, on one calendar.</span></div><div class="fgi"><img src="img/calendar.jpg" alt="The calendar screenshot, tilted, on the right side of the banner"></div></div>
+      <p class="small" style="margin-top:8px">Google calls it the feature graphic. 1024 x 500 pixels. Proposal: the name, the calendar sentence you chose, and a piece of the calendar.</p>
+    </div>
+    <div>
+      <h4>4. The store texts</h4>
+      <div class="card listing" data-cid="as-listing" data-label="Store texts">
+        <div class="li-ic">F</div>
+        <div>
+          <b data-max="30">Fandex: Movies, Shows &amp; Games</b>
+          <p data-max="80">Rate shows, get books. One calendar, one score for films, shows, games, books.</p>
+        </div>
+      </div>
+      <p class="small" style="margin-top:8px">Drafts. The title may have 30 characters, the line under it 80. A long description (up to 4,000 characters) in English and German follows once the messages are final.</p>
+    </div>
   </div>
 
+  <h4>5. The store video, 30 seconds</h4>
+  <div class="grid g5" data-label="Video storyboard">
+    <div class="vf" data-cid="as-v1"><b>0 to 5 s</b><span>Text only: the slogan.</span></div>
+    <div class="vf" data-cid="as-v2"><b>5 to 12 s</b><span>The calendar, swiping through a month.</span></div>
+    <div class="vf" data-cid="as-v3"><b>12 to 20 s</b><span>A title's score, then a tap on "Why?".</span></div>
+    <div class="vf" data-cid="as-v4"><b>20 to 27 s</b><span>Recommended: a book, picked from rated shows.</span></div>
+    <div class="vf" data-cid="as-v5"><b>27 to 30 s</b><span>The name and "On Google Play".</span></div>
+  </div>
+  <p class="small" style="margin-top:8px">A screen recording with one line of text per scene. Google plays the first 30 seconds automatically, without sound.</p>
+
+  <h4>6. All asset tasks <span class="cnt">click a title for details</span></h4>
   <div data-list="assets"></div>
 </section>
 
 <!-- =============================================================== CHANNELS -->
 <section id="channels" data-title="Channels">
-  <div class="eyebrow">Where we post</div>
-  <h2>Channels.</h2>
-  <p class="sub">Few places, each done properly. Subreddit rules marked here come from third-party summaries, because Reddit blocks automated reading. Read each sidebar by hand before posting.</p>
+  <h2>Channels</h2>
+  <p class="sub" data-cid="c-what">Where we announce Fandex, in which order, and the rules of each place. The subreddit rules come from third-party summaries, because Reddit blocks automated reading. Read each one by hand before posting.</p>
 
-  <div class="grid g3" style="margin-top:18px">
-    <div class="card chart" data-cid="c-bench1" data-label="Benchmark: one Reddit launch">
-      <h3>One developer's Reddit launch</h3><div class="cs">Installs from the first post, and after reworking it with feedback.</div>
-      <div id="ch-reddit"></div>
-      <p class="small" style="margin-top:8px">The repost with a new video did 26 times the first one.</p>
-    </div>
-    <div class="card tile" data-cid="c-bench2"><div class="n">3</div><div class="l">upvotes for the median indie launch on Product Hunt</div><div class="s">Indie Hackers, 2026</div>
-      <div class="n" style="margin-top:18px">2.3%</div><div class="l">of Show HN posts reach the front page. One that hit number 1 brought a mobile app 4,500 installs in two days</div></div>
-    <div class="card tile" data-cid="c-bench3"><div class="n">~58%</div><div class="l">of Play installs come from store search, so the title and the short description do more work than any post</div><div class="s">secondary source</div>
-      <div class="n" style="margin-top:18px">490</div><div class="l">views for a median TikTok post</div></div>
+  <h4>What to expect from each kind of channel</h4>
+  <div class="grid g4">
+    <div class="card tile" data-cid="c-bench1"><div class="n">32 → 828</div><div class="l">installs one developer got from a Reddit post: 32 from the first try, 828 after reworking it with the feedback.</div><div class="s">Indie Hackers</div></div>
+    <div class="card tile" data-cid="c-bench2"><div class="n">3</div><div class="l">votes is what a typical small launch gets on Product Hunt.</div><div class="s">Indie Hackers, 2026</div></div>
+    <div class="card tile" data-cid="c-bench3"><div class="n">2.3%</div><div class="l">of "Show HN" posts reach the Hacker News front page.</div><div class="s">daily.dev</div></div>
+    <div class="card tile" data-cid="c-bench4"><div class="n">58%</div><div class="l">of installs on Google Play come from people searching the store, not from posts.</div><div class="s">secondary source</div></div>
   </div>
 
+  <h4>All channel tasks <span class="cnt">click a title for the rule and the post format</span></h4>
   <div data-list="channels"></div>
 
-  <h4>Stay away from</h4>
-  <div class="card" data-cid="c-avoid" data-label="Channels to avoid">
-    <p class="sub" style="max-width:none"><b style="color:var(--tx)">r/androidapps</b> removes launch posts. <b style="color:var(--tx)">r/movies, r/gaming, r/books, r/Steam</b> remove developer posts fast. <b style="color:var(--tx)">r/AppHookup</b> is price drops only. <b style="color:var(--tx)">r/de_EDV</b> bans self-promotion. <b style="color:var(--tx)">r/InternetIsBeautiful</b> wants a web tool with no account and no download, so only a calendar page could ever fit. Paid "featured" slots in directories are not worth it.</p>
+  <h4>Places we do not post in</h4>
+  <div class="card" style="padding:6px 8px" data-cid="c-avoid" data-label="Table: places to avoid">
+    <table>
+      <tr><th>Place</th><th>Why not</th></tr>
+      <tr><td>r/androidapps</td><td>Removes launch posts.</td></tr>
+      <tr><td>r/movies, r/gaming, r/books, r/Steam</td><td>Remove posts by developers.</td></tr>
+      <tr><td>r/AppHookup</td><td>Only for price drops.</td></tr>
+      <tr><td>r/de_EDV</td><td>Bans self-promotion.</td></tr>
+      <tr><td>Paid "featured" slots in app directories</td><td>Cost money, bring little.</td></tr>
+    </table>
   </div>
 </section>
 
 <!-- ================================================================== ADMIN -->
-<section id="admin" data-title="Admin">
-  <div class="eyebrow">Paperwork</div>
-  <h2>Admin to-do.</h2>
-  <p class="sub">The account, the legal side, the logins. Gold items are yours, violet are mine.</p>
-  <div class="grid g4" style="margin-top:18px">
-    <div class="card tile" data-cid="a-done1"><div class="n" style="color:var(--ok)">✓</div><div class="l">Play account exists, $25 paid, identity verified</div></div>
-    <div class="card tile" data-cid="a-done2"><div class="n" style="color:var(--ok)">✓</div><div class="l">Business registered, tax numbers issued</div></div>
-    <div class="card tile" data-cid="a-done3"><div class="n" style="color:var(--ok)">✓</div><div class="l">Organization website verified in Play</div></div>
-    <div class="card tile" data-cid="a-done4"><div class="n" style="color:var(--ok)">✓</div><div class="l">Legal pages live, signing set up, a bundle builds</div></div>
+<section id="admin" data-title="Admin tasks">
+  <h2>Admin tasks</h2>
+  <p class="sub" data-cid="a-what">The Google Play account, legal matters and logins. Most of these are yours, because they need your identity. Click a title for details.</p>
+  <h4>Already done</h4>
+  <div class="grid g4">
+    <div class="card tile good" data-cid="a-done1"><div class="n">✓</div><div class="l">Google Play account exists, $25 paid, identity verified.</div></div>
+    <div class="card tile good" data-cid="a-done2"><div class="n">✓</div><div class="l">Business registered, tax numbers issued.</div></div>
+    <div class="card tile good" data-cid="a-done3"><div class="n">✓</div><div class="l">Business website verified in Google Play.</div></div>
+    <div class="card tile good" data-cid="a-done4"><div class="n">✓</div><div class="l">Legal pages are live. The app can be built for the store.</div></div>
   </div>
   <div data-list="admin"></div>
 </section>
 
 <!-- ================================================================ PRODUCT -->
-<section id="product" data-title="App readiness">
-  <div class="eyebrow">The app itself</div>
-  <h2>What the app still needs before strangers arrive.</h2>
-  <p class="sub">No new features. Only what a launch leans on: a first run that works, a way to hear from people, a way to see what they do, and a server that holds.</p>
+<section id="product" data-title="App work">
+  <h2>App work before launch</h2>
+  <p class="sub" data-cid="p-what">What the app still needs before strangers install it. No new features: only a first start that works, a way for users to send feedback, and a server that can take the load. Click a title for details.</p>
   <div data-list="product"></div>
 </section>
 
 <!-- ============================================================== TELEMETRY -->
 <section id="telemetry" data-title="Telemetry">
-  <div class="eyebrow">What we measure</div>
-  <h2>Three numbers to steer by, one per story.</h2>
-  <p class="sub">Counts only. Nothing that names a person or a phone. Today the website counts pageviews and the app sends nothing.</p>
+  <h2>Telemetry</h2>
+  <p class="sub" data-cid="tm-what">What usage data we collect, where it comes from, and what the admin page will show. Today the website counts page views and the app sends nothing. This is a proposal: strike or add rows.</p>
 
-  <div class="grid g3" style="margin-top:18px">
-    <div class="card tile hl" data-cid="tm-n1" data-label="Number 1: cross-media"><div class="k2">Story 1</div><div class="n">2+ media</div><div class="l">Share of accounts that rate in two or more media. If taste travels, this climbs.</div></div>
-    <div class="card tile" data-cid="tm-n2" data-label="Number 2: reminders"><div class="k2">Story 2</div><div class="n">Reminder on</div><div class="l">Share of weekly actives with a wishlisted title and a reminder set.</div></div>
-    <div class="card tile" data-cid="tm-n3" data-label="Number 3: Why"><div class="k2">Story 3</div><div class="n">Opened Why</div><div class="l">Share of weekly actives who looked at what moved a score.</div></div>
-  </div>
-  <div class="grid g4" style="margin-top:14px">
-    <div class="card tile" data-cid="tm-h1"><div class="k2">Health</div><div class="n">Activation</div><div class="l">New accounts with 5 ratings in week one. No ratings, no score.</div></div>
-    <div class="card tile" data-cid="tm-h2"><div class="k2">Health</div><div class="n">Week 4</div><div class="l">Share of a signup week still active four weeks later.</div></div>
-    <div class="card tile" data-cid="tm-h3"><div class="k2">Gate</div><div class="n">3,500</div><div class="l">Weekly active accounts. The premium gate, already agreed.</div></div>
-    <div class="card tile" data-cid="tm-h4"><div class="k2">Gate</div><div class="n">10,000</div><div class="l">Website pageviews a month. The ads gate, already counted.</div></div>
-  </div>
-
-  <h4>Where each signal comes from</h4>
-  <div class="lanes" data-label="Signal sources">
-    <div class="lane2" data-cid="tm-l0" data-label="Source: Play Console">
-      <div class="lh"><b>Free from Play Console</b><small>nothing to build</small></div>
-      <div><span class="chip">installs</span><span class="chip">uninstalls</span><span class="chip">store page conversion</span><span class="chip">crashes</span><span class="chip">star ratings</span><span class="chip">search terms</span></div>
-    </div>
-    <div class="lane2" data-cid="tm-la" data-label="Source: our server">
-      <div class="lh"><b>Already on our server</b><small>no new data leaves the phone</small></div>
-      <div><span class="chip">active accounts</span><span class="chip">signups by provider</span><span class="chip">week-4 retention</span><span class="chip">ratings per medium</span><span class="chip">media mix per account</span><span class="chip">first item in a new medium</span><span class="chip">wishlist sizes</span><span class="chip">Trakt and Steam connected</span><span class="chip">imports run</span><span class="chip">calendar and search requests</span><span class="chip">score accuracy</span><span class="chip">errors</span></div>
-    </div>
-    <div class="lane2 new" data-cid="tm-lb" data-label="Source: the app">
-      <div class="lh"><b>Counted in the app</b><small>sent as totals, once a session</small></div>
-      <div><span class="chip">screens opened</span><span class="chip">Why opened</span><span class="chip">Insights opened</span><span class="chip">recommended titles opened, by medium</span><span class="chip">reminders set and tapped</span><span class="chip">widget ticks</span><span class="chip">first-run steps</span><span class="chip">session length</span></div>
-    </div>
-    <div class="lout">↓ <b>Admin › Usage</b></div>
-  </div>
-
-  <h4>What the admin page would show <span class="cnt">mock numbers</span></h4>
-  <div class="card dash" data-cid="tm-dash" data-label="Admin page mock">
-    <div class="grid g4">
-      <div class="dt2"><small>Weekly active accounts</small><b>312</b><div class="pbar"><i style="width:9%"></i></div><em>9% of the 3,500 gate</em></div>
-      <div class="dt2"><small>New accounts this week</small><b>48</b><em>31 Google · 12 Trakt · 5 Discord</em></div>
-      <div class="dt2"><small>Activated in week one</small><b>61%</b><em>5 ratings or more</em></div>
-      <div class="dt2"><small>Back in week 4</small><b>11%</b><em>benchmark 8.5%</em></div>
-    </div>
-    <div class="grid g3" style="margin-top:14px">
-      <div class="dpanel"><h5>Who comes back, by signup week</h5>
-        <svg viewBox="0 0 300 120" role="img" aria-label="Mock retention curve falling from 100 percent to 11 percent over four weeks"><polyline points="10,10 80,62 150,84 220,94 290,99" fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linejoin="round"/><g fill="var(--gold)"><circle cx="10" cy="10" r="4"/><circle cx="80" cy="62" r="4"/><circle cx="150" cy="84" r="4"/><circle cx="220" cy="94" r="4"/><circle cx="290" cy="99" r="4"/></g><g font-size="10" fill="var(--tx2)" font-family="monospace"><text x="10" y="116">wk 0</text><text x="70" y="116">wk 1</text><text x="140" y="116">wk 2</text><text x="210" y="116">wk 3</text><text x="268" y="116">wk 4</text><text x="18" y="16">100%</text><text x="88" y="60">42%</text><text x="158" y="82">22%</text><text x="228" y="90">15%</text><text x="262" y="92">11%</text></g></svg></div>
-      <div class="dpanel"><h5>What weekly actives use</h5><div id="ch-adopt"></div></div>
-      <div class="dpanel"><h5>The three stories</h5><div id="ch-stories"></div></div>
-    </div>
-  </div>
-
-  <h4>The list <span class="cnt">strike or add, then I build</span></h4>
-  <div class="card" style="padding:6px 8px" data-cid="tm-table" data-label="Table: signals">
-    <table class="sig">
-      <tr><th>Signal</th><th>Counted when</th><th>It answers</th><th>From</th></tr>
-      <tr data-cid="tm-s1"><td>Active accounts per day</td><td>An account's first request of the day</td><td>How many people use it. The premium gate.</td><td><span class="tag2 a">server</span></td></tr>
-      <tr data-cid="tm-s2"><td>Retention by signup week</td><td>Same moment, added to that signup week's count</td><td>Do they come back?</td><td><span class="tag2 a">server</span></td></tr>
-      <tr data-cid="tm-s3"><td>Signups by provider</td><td>An account is created</td><td>Which sign-in people pick.</td><td><span class="tag2 a">server</span></td></tr>
-      <tr data-cid="tm-s4"><td>Activation</td><td>An account's fifth rating, if within seven days</td><td>Does the first run work?</td><td><span class="tag2 a">server</span></td></tr>
-      <tr data-cid="tm-s5"><td>Media mix</td><td>Daily, from the ratings already stored</td><td>Story 1: do people rate across media?</td><td><span class="tag2 a">server</span></td></tr>
-      <tr data-cid="tm-s6"><td>First item in a new medium</td><td>A rating or wishlist entry in a medium that account had none in</td><td>Story 1: does taste lead somewhere new?</td><td><span class="tag2 a">server</span></td></tr>
-      <tr data-cid="tm-s7"><td>Sync and import</td><td>Trakt or Steam connected, an import run</td><td>How people bring their history.</td><td><span class="tag2 a">server</span></td></tr>
-      <tr data-cid="tm-s8"><td>Calendar and search requests</td><td>The request arrives</td><td>Story 2: is the calendar used?</td><td><span class="tag2 a">server</span></td></tr>
-      <tr data-cid="tm-s9"><td>Score accuracy</td><td>Already reported by each device</td><td>Story 3: is the number right?</td><td><span class="tag2 a">server</span></td></tr>
-      <tr data-cid="tm-s10"><td>Errors</td><td>A request fails, a provider fails</td><td>What broke on launch day.</td><td><span class="tag2 a">server</span></td></tr>
-      <tr data-cid="tm-s11"><td>Screens opened</td><td>Home, Search, Calendar, Wishlist, a title, Insights, Settings</td><td>What people tap, and how often.</td><td><span class="tag2 b">app</span></td></tr>
-      <tr data-cid="tm-s12"><td>Why and Insights opened</td><td>The sheet or the page opens</td><td>Story 3: does anyone read the working?</td><td><span class="tag2 b">app</span></td></tr>
-      <tr data-cid="tm-s13"><td>Recommended titles opened</td><td>A tap on a recommended card, with its medium and whether you rate that medium</td><td>Story 1: do cross-media picks get opened?</td><td><span class="tag2 b">app</span></td></tr>
-      <tr data-cid="tm-s14"><td>Reminders</td><td>Set, arrived, tapped. The three switches.</td><td>Story 2: do reminders bring people back?</td><td><span class="tag2 b">app</span></td></tr>
-      <tr data-cid="tm-s15"><td>First-run steps</td><td>Type picker shown, five rated, skipped</td><td>Where new people drop out.</td><td><span class="tag2 b">app</span></td></tr>
-      <tr data-cid="tm-s16"><td>Session length and widget ticks</td><td>The app goes to the background</td><td>How long a visit is.</td><td><span class="tag2 b">app</span></td></tr>
+  <h4>The numbers the admin page will show</h4>
+  <div class="card" style="padding:6px 8px" data-cid="tm-metrics" data-label="Table: metrics">
+    <table>
+      <tr><th>Number</th><th>What it measures</th><th>Why we track it</th></tr>
+      <tr data-cid="tm-n1"><td>Accounts that rate in 2 or more media types</td><td>Share of all accounts with ratings in at least two of films, shows, games, books.</td><td>Shows whether message 1 is true for real users.</td></tr>
+      <tr data-cid="tm-n2"><td>Accounts with a reminder set</td><td>Share of weekly active accounts that have a wishlisted title with a reminder.</td><td>Shows whether message 2 is used.</td></tr>
+      <tr data-cid="tm-n3"><td>Accounts that opened "Why?"</td><td>Share of weekly active accounts that opened the explanation of a score.</td><td>Shows whether message 3 is used.</td></tr>
+      <tr data-cid="tm-h1"><td>New accounts with 5 ratings in the first week</td><td>Share of new accounts that rate at least five titles within seven days.</td><td>Without ratings there is no score, so this is the first hurdle.</td></tr>
+      <tr data-cid="tm-h2"><td>Accounts still active after four weeks</td><td>Of the accounts created in one week, the share that is active four weeks later.</td><td>Shows whether people come back.</td></tr>
+      <tr data-cid="tm-h3"><td>Weekly active accounts</td><td>Accounts that used the app in the last seven days.</td><td>At 3,500 the paid tier starts, as already agreed.</td></tr>
+      <tr data-cid="tm-h4"><td>Website page views per month</td><td>Already counted today.</td><td>At 10,000 ads start, as already agreed.</td></tr>
     </table>
   </div>
 
-  <h4>The rules</h4>
-  <div class="grid g4">
-    <div class="card tile good" data-cid="tm-r1"><div class="n">✓</div><div class="l"><b>Counts per day.</b> Never a row per tap.</div></div>
-    <div class="card tile good" data-cid="tm-r2"><div class="n">✓</div><div class="l"><b>No device or install id.</b> No fingerprint either.</div></div>
-    <div class="card tile good" data-cid="tm-r3"><div class="n">✓</div><div class="l"><b>No third-party kit.</b> Our server, our tables.</div></div>
-    <div class="card tile good" data-cid="tm-r4"><div class="n">✓</div><div class="l"><b>Policy text first.</b> Both languages, before any code.</div></div>
+  <h4>Where the data comes from</h4>
+  <div class="lanes" data-label="Data sources">
+    <div class="lane2" data-cid="tm-l0" data-label="Source: Google Play Console">
+      <div class="lh"><b>Google Play Console</b><small>free, nothing to build</small></div>
+      <div><span class="chip">installs</span><span class="chip">uninstalls</span><span class="chip">store page visits</span><span class="chip">crashes</span><span class="chip">star ratings</span><span class="chip">search terms</span></div>
+    </div>
+    <div class="lane2" data-cid="tm-la" data-label="Source: our server">
+      <div class="lh"><b>Our server</b><small>data it already has, no change in the app</small></div>
+      <div><span class="chip">active accounts</span><span class="chip">signups per sign-in method</span><span class="chip">who comes back</span><span class="chip">ratings per media type</span><span class="chip">first rating in a new media type</span><span class="chip">wishlist sizes</span><span class="chip">Trakt and Steam connections</span><span class="chip">imports</span><span class="chip">calendar and search requests</span><span class="chip">score accuracy</span><span class="chip">errors</span></div>
+    </div>
+    <div class="lane2 new" data-cid="tm-lb" data-label="Source: the app">
+      <div class="lh"><b>The app</b><small>new: sends totals once per session</small></div>
+      <div><span class="chip">screens opened</span><span class="chip">"Why?" opened</span><span class="chip">Insights opened</span><span class="chip">recommended titles opened</span><span class="chip">reminders set and tapped</span><span class="chip">widget use</span><span class="chip">first-start steps</span><span class="chip">session length</span></div>
+    </div>
   </div>
-  <div class="note" data-cid="tm-grey"><b>The one grey spot.</b> The server-side signals read nothing from the phone, so German law asks for no consent. The app-side totals are less clear-cut. My suggestion: a "Share anonymous usage counts" switch in Settings, on by default, named in the policy. The strict alternative is to ask on first start. Not legal advice.</div>
 
+  <h4>Every event we would count <span class="cnt">strike or add</span></h4>
+  <div class="card" style="padding:6px 8px" data-cid="tm-table" data-label="Table: events">
+    <table class="sig">
+      <tr><th>Event</th><th>Counted when</th><th>Question it answers</th><th>Source</th></tr>
+      <tr data-cid="tm-s1"><td>Active accounts per day</td><td>An account makes its first request of the day.</td><td>How many people use Fandex?</td><td><span class="tag2 a">server</span></td></tr>
+      <tr data-cid="tm-s2"><td>Returning accounts per signup week</td><td>Same moment, counted for the week the account was created.</td><td>Do people come back?</td><td><span class="tag2 a">server</span></td></tr>
+      <tr data-cid="tm-s3"><td>Signups per sign-in method</td><td>An account is created.</td><td>Do people sign in with Google, Trakt or Discord?</td><td><span class="tag2 a">server</span></td></tr>
+      <tr data-cid="tm-s4"><td>Fifth rating within a week</td><td>An account saves its fifth rating within seven days of signing up.</td><td>Does the first start work?</td><td><span class="tag2 a">server</span></td></tr>
+      <tr data-cid="tm-s5"><td>Media types per account</td><td>Once a day, from the stored ratings.</td><td>Do people rate more than one media type?</td><td><span class="tag2 a">server</span></td></tr>
+      <tr data-cid="tm-s6"><td>First entry in a new media type</td><td>An account rates or wishlists something in a media type it had nothing in.</td><td>Does a recommendation lead people to a new media type?</td><td><span class="tag2 a">server</span></td></tr>
+      <tr data-cid="tm-s7"><td>Connections and imports</td><td>Trakt or Steam is connected, a list is imported.</td><td>How do people bring their history?</td><td><span class="tag2 a">server</span></td></tr>
+      <tr data-cid="tm-s8"><td>Calendar and search requests</td><td>The request reaches the server.</td><td>Is the calendar used? Is search used?</td><td><span class="tag2 a">server</span></td></tr>
+      <tr data-cid="tm-s9"><td>Score accuracy</td><td>Already reported by each device today.</td><td>Is the score right?</td><td><span class="tag2 a">server</span></td></tr>
+      <tr data-cid="tm-s10"><td>Errors</td><td>A request fails, or a data provider fails.</td><td>What broke?</td><td><span class="tag2 a">server</span></td></tr>
+      <tr data-cid="tm-s11"><td>Screens opened</td><td>Home, Search, Calendar, Wishlist, a title page, Insights or Settings opens.</td><td>Which parts of the app are used, and how often?</td><td><span class="tag2 b">app</span></td></tr>
+      <tr data-cid="tm-s12"><td>"Why?" and Insights opened</td><td>The sheet or the page opens.</td><td>Does anyone look at the explanation?</td><td><span class="tag2 b">app</span></td></tr>
+      <tr data-cid="tm-s13"><td>Recommended title opened</td><td>A tap on a recommended title, with its media type.</td><td>Are recommendations in other media types opened?</td><td><span class="tag2 b">app</span></td></tr>
+      <tr data-cid="tm-s14"><td>Reminders</td><td>A reminder is set, arrives, or is tapped.</td><td>Do reminders bring people back?</td><td><span class="tag2 b">app</span></td></tr>
+      <tr data-cid="tm-s15"><td>First-start steps</td><td>The media type picker is shown, five titles are rated, or it is skipped.</td><td>Where do new users give up?</td><td><span class="tag2 b">app</span></td></tr>
+      <tr data-cid="tm-s16"><td>Session length</td><td>The app goes to the background.</td><td>How long does a visit last?</td><td><span class="tag2 b">app</span></td></tr>
+    </table>
+  </div>
+
+  <h4>Privacy rules for all of it</h4>
+  <div class="card" style="padding:6px 8px" data-cid="tm-rules" data-label="Table: privacy rules">
+    <table>
+      <tr><th>Rule</th><th>What it means</th></tr>
+      <tr data-cid="tm-r1"><td>Totals per day</td><td>We store "calendar opened 412 times today", never a list of single events.</td></tr>
+      <tr data-cid="tm-r2"><td>No user or device identifier</td><td>No install ID, no fingerprint. A count cannot be traced to a person.</td></tr>
+      <tr data-cid="tm-r3"><td>No outside analytics service</td><td>Everything stays on our own server.</td></tr>
+      <tr data-cid="tm-r4"><td>Privacy policy first</td><td>The policy text is updated in German and English before any code ships.</td></tr>
+    </table>
+  </div>
+  <div class="note" data-cid="tm-grey"><b>One open legal question.</b> Data the server already has needs no consent under German law. Totals sent by the app are less clear. Two ways to handle it: (A) a switch in Settings, "Share anonymous usage counts", switched on by default and described in the privacy policy, or (B) ask every user on first start. I recommend A. I am not a lawyer.</div>
+
+  <h4>Telemetry tasks <span class="cnt">click a title for details</span></h4>
   <div data-list="telemetry"></div>
 </section>
 
 <!-- ================================================================== GOALS -->
 <section id="goals" data-title="Goals">
-  <div class="eyebrow">How we know it worked</div>
-  <h2>Goals for the first 90 days.</h2>
-  <p class="sub">A proposal. The first weeks will show how far off it is. Targets sit a little above the published averages.</p>
-  <div class="grid g4" style="margin-top:18px">
-    <div class="card tile hl" data-cid="go-1"><div class="n">1,500</div><div class="l">installs from Play</div><div class="s">by 17 May 2027</div></div>
-    <div class="card tile" data-cid="go-2"><div class="n">4.5+</div><div class="l">stars, from at least 30 ratings</div><div class="s">4.0 already costs 17% of installs</div></div>
-    <div class="card tile" data-cid="go-3"><div class="n">10%</div><div class="l">still using it after 30 days</div><div class="s">entertainment average: 8.5%</div></div>
-    <div class="card tile" data-cid="go-4"><div class="n">1,000</div><div class="l">pages in Google's index</div><div class="s">today: 6 of about 6,000</div></div>
+  <h2>Goals</h2>
+  <p class="sub" data-cid="go-what">The numbers that tell us whether the launch worked, measured 90 days after launch day (17 May 2027). These are my proposal, set a little above the published averages for apps of this kind.</p>
+  <div class="grid g4" style="margin-top:14px">
+    <div class="card tile hl" data-cid="go-1"><div class="n">1,500</div><div class="l">installs from Google Play</div></div>
+    <div class="card tile" data-cid="go-2"><div class="n">4.5</div><div class="l">stars or better, from at least 30 ratings</div></div>
+    <div class="card tile" data-cid="go-3"><div class="n">10%</div><div class="l">of installers still use the app after 30 days. The average for entertainment apps is 8.5%.</div></div>
+    <div class="card tile" data-cid="go-4"><div class="n">1,000</div><div class="l">fandex.org pages found by Google. Today it is 6 of about 6,000.</div></div>
   </div>
-  <div class="grid g2" style="margin-top:14px">
-    <div class="card chart" data-cid="go-funnel" data-label="Chart: launch funnel">
-      <h3>What it takes to get there</h3><div class="cs">A planning model built from the published averages, not a forecast.</div>
-      <div id="ch-funnel"></div>
-    </div>
-    <div class="card chart" data-cid="go-rating" data-label="Chart: rating and conversion">
-      <h3>Why the first ratings matter so much</h3><div class="cs">Share of store visitors who still install, against a 5.0 app.</div>
-      <div id="ch-rating"></div>
-      <p class="small" style="margin-top:10px">So the one-star bugs have to be found before launch day, on your phone and your friends', and the review prompt goes to people who just rated their tenth title.</p>
-    </div>
-  </div>
-  <div class="card" style="margin-top:14px" data-cid="go-gates" data-label="Gates">
-    <h3 style="font-size:18px">The gates already agreed</h3>
-    <p class="sub" style="max-width:none;margin-top:6px">Ads switch on at <b style="color:var(--tx)">10,000 website pageviews a month</b>. Premium at <b style="color:var(--tx)">3,500 weekly actives</b>, held. Ads make the project commercial: trader status, TMDB's paid tier, and the IGDB question all change that day. Review points: 30 and 60 days after launch.</p>
+  <div class="card" style="padding:6px 8px;margin-top:14px" data-cid="go-facts" data-label="Table: what the goals imply">
+    <table>
+      <tr><th>What the goals imply</th><th></th></tr>
+      <tr data-cid="go-funnel"><td>To reach 1,500 installs</td><td>About 90,000 people have to see a post or video. Roughly 1 in 10 opens the store page, and 16% of those install (the Google Play average).</td></tr>
+      <tr data-cid="go-rating"><td>Why the star rating matters</td><td>An app with 4.0 stars gets 17% fewer installs than one with 5.0. At 3.0 stars it is 43% fewer. So serious bugs have to be found before launch day.</td></tr>
+      <tr data-cid="go-gates"><td>The two thresholds already agreed</td><td>Ads start at 10,000 website page views a month. The paid tier starts at 3,500 weekly active accounts.</td></tr>
+      <tr data-cid="go-review"><td>When we look at the numbers</td><td>30 and 60 days after launch.</td></tr>
+    </table>
   </div>
 </section>
 
 <!-- ================================================================= FORGOT -->
 <section id="forgot" data-title="Risks">
-  <div class="eyebrow">The rest</div>
-  <h2>What could go wrong, and what is easy to forget.</h2>
+  <h2>Risks and reminders</h2>
+  <p class="sub" data-cid="f-what">What could go wrong and what we do about it, followed by things that are easy to forget.</p>
 
-  <div class="grid g2" style="margin-top:18px">
-    <div class="card" data-cid="f-risks" data-label="Risk map">
-      <div class="rmx">
-        <span class="ry">likely ↑</span>
-        <div class="rcell"><i data-tip="6 · One person, one launch week">6</i></div><div class="rcell warm"><i data-tip="5 · Posts removed, or no reaction">5</i></div><div class="rcell hot"></div>
-        <div class="rcell"></div><div class="rcell warm"><i data-tip="3 · A launch spike hits the free plan">3</i></div><div class="rcell hot"><i data-tip="1 · The D-U-N-S or the upgrade drags on">1</i><i data-tip="2 · Play rejects the listing over cover art">2</i><i data-tip="7 · The name collides with a mark (unknown)">7?</i></div>
-        <div class="rcell"></div><div class="rcell"></div><div class="rcell warm"><i data-tip="4 · The IGDB licence question">4</i></div>
-        <span class="rx">hurts more →</span>
-      </div>
-    </div>
-    <div class="card" style="padding:6px 8px" data-label="Risks and answers">
-      <table>
-        <tr><th></th><th>Risk</th><th>Our answer</th></tr>
-        <tr data-cid="f-r1"><td>1</td><td>The D-U-N-S or the upgrade drags on</td><td>Decide 15 Dec. Fallback: personal route.</td></tr>
-        <tr data-cid="f-r2"><td>2</td><td>Play rejects the listing over cover art</td><td>Cleared covers only.</td></tr>
-        <tr data-cid="f-r3"><td>3</td><td>A launch spike hits the free plan</td><td>Workers Paid, a load rehearsal.</td></tr>
-        <tr data-cid="f-r4"><td>4</td><td>The IGDB licence question is open</td><td>Stay non-commercial. Kill switch exists.</td></tr>
-        <tr data-cid="f-r5"><td>5</td><td>Posts removed, or no reaction</td><td>One place a day. Rework and repost.</td></tr>
-        <tr data-cid="f-r6"><td>6</td><td>One person, one launch week</td><td>All written by 8 Feb. Weekend off.</td></tr>
-        <tr data-cid="f-r7"><td>7</td><td>The name collides with a mark</td><td>Register search in early December.</td></tr>
-      </table>
-    </div>
+  <h4>Risks</h4>
+  <div class="card" style="padding:6px 8px" data-cid="f-risks" data-label="Table: risks">
+    <table>
+      <tr><th>Risk</th><th>How likely</th><th>How bad</th><th>What we do</th></tr>
+      <tr data-cid="f-r1"><td>The D-U-N-S number or the account upgrade is late</td><td>Medium</td><td>Launch moves</td><td>Decide on 15 Dec. Fallback: keep the personal account, 12 testers for 14 days.</td></tr>
+      <tr data-cid="f-r2"><td>Google rejects the store page because of cover art</td><td>Medium, if we use real covers</td><td>Launch moves</td><td>Use only covers we are allowed to use.</td></tr>
+      <tr data-cid="f-r7"><td>The name "Fandex" is already a registered trademark</td><td>Unknown</td><td>Rename everything</td><td>Search the trademark registers in early December.</td></tr>
+      <tr data-cid="f-r3"><td>Too many users at once for the free Cloudflare plan</td><td>Medium</td><td>App fails for some</td><td>Switch to the paid plan, test the load beforehand.</td></tr>
+      <tr data-cid="f-r5"><td>Posts get removed, or nobody reacts</td><td>High</td><td>Few installs</td><td>One place per day. Rework the post and try again.</td></tr>
+      <tr data-cid="f-r6"><td>One person has to do everything in launch week</td><td>Certain</td><td>Slow answers</td><td>Write all posts and mails by 8 Feb. I draft replies, you send them.</td></tr>
+      <tr data-cid="f-r4"><td>The game data provider (IGDB) has not confirmed our licence</td><td>Low before ads</td><td>Games disappear</td><td>Stay non-commercial. A switch to turn games off exists.</td></tr>
+    </table>
   </div>
 
-  <h4>Easy to forget <span class="cnt">hover for why</span></h4>
-  <ul class="check tips">
-    <li data-cid="f-1" data-tip="German law bans posing as a user. It also reads better."><b>Every post says "I built this".</b></li>
-    <li data-cid="f-2" data-tip="Two clicks at most. Fines run to 50,000 euros."><b>Each social profile links the Impressum.</b></li>
-    <li data-cid="f-3" data-tip="Trakt's terms ask for it there, not only in the app."><b>Trakt's notice goes in the store description.</b></li>
-    <li data-cid="f-4" data-tip="Play forbids it. No giveaways tied to stars."><b>Never offer anything for a rating.</b></li>
-    <li data-cid="f-5" data-tip="Everyone gets it at once, so the check on the test track is the only rehearsal."><b>A first Play release can't roll out in stages.</b></li>
-    <li data-cid="f-6" data-tip="On YouTube. Otherwise Play refuses the video."><b>The store video needs monetization off.</b></li>
-    <li data-cid="f-7" data-tip="Before installing from Play. Your rows come back on sign-in."><b>Your phone must uninstall the sideloaded app once.</b></li>
-    <li data-cid="f-8" data-tip="A task on your PC rebuilds the site each morning. Or we publish by hand."><b>The PC stays on in launch week.</b></li>
-    <li data-cid="f-9" data-tip="The first question people will ask. The website works on an iPhone and can sit on the home screen."><b>"Is there an iPhone app?"</b></li>
-    <li data-cid="f-10" data-tip="The second question. The answer never includes a figure."><b>"How does it stay free?"</b></li>
-    <li data-cid="f-11" data-tip="Not launch work, but books stop if it lapses."><b>Hardcover's key expires 24 Oct 2027.</b></li>
-    <li data-cid="f-12" data-tip="In writing, from the person, before a quote goes on the site."><b>Testimonials need a yes.</b></li>
-    <li data-cid="f-13" data-tip="The app targets 36, which is current."><b>Play's target API rule moves every August.</b></li>
-    <li data-cid="f-14" data-tip="Posts, mails and clips are finished by 8 Feb, so the week is only answering people."><b>Write everything before launch week.</b></li>
-  </ul>
+  <h4>Easy to forget</h4>
+  <div class="card" style="padding:6px 8px" data-label="Table: reminders">
+    <table>
+      <tr><th>Reminder</th><th>Why</th></tr>
+      <tr data-cid="f-1"><td>Every post says "I built this"</td><td>German law forbids posing as a user.</td></tr>
+      <tr data-cid="f-2"><td>Every social media profile links the Impressum</td><td>Required by law. Fines go up to 50,000 euros.</td></tr>
+      <tr data-cid="f-3"><td>Trakt's notice goes in the store description</td><td>Trakt's terms require it there, not only in the app.</td></tr>
+      <tr data-cid="f-4"><td>Never offer anything for a rating or review</td><td>Google Play forbids it.</td></tr>
+      <tr data-cid="f-5"><td>The first Google Play release reaches everyone at once</td><td>It cannot be rolled out in steps, so the test before it is the only rehearsal.</td></tr>
+      <tr data-cid="f-6"><td>The store video must have ads switched off on YouTube</td><td>Otherwise Google Play refuses it.</td></tr>
+      <tr data-cid="f-7"><td>Uninstall the app on your phone once before installing from Google Play</td><td>The store version is signed differently. Your data comes back when you sign in.</td></tr>
+      <tr data-cid="f-8"><td>Your PC stays on during launch week</td><td>A task on it rebuilds the website every morning.</td></tr>
+      <tr data-cid="f-9"><td>Have an answer for "Is there an iPhone app?"</td><td>It will be the first question. Answer: the website works on iPhone.</td></tr>
+      <tr data-cid="f-10"><td>Have an answer for "How does it stay free?"</td><td>It will be the second question. Never name a cost figure.</td></tr>
+      <tr data-cid="f-12"><td>Ask before quoting a user</td><td>A written yes is needed before a quote goes on the website.</td></tr>
+      <tr data-cid="f-14"><td>Finish all posts, mails and videos by 8 Feb</td><td>So launch week is only for answering people.</td></tr>
+    </table>
+  </div>
 
-  <h4>Later, on purpose</h4>
-  <div data-cid="f-later" data-label="Later"><span class="chip">a native iPhone app</span><span class="chip">a public beta</span><span class="chip">an email waiting list</span><span class="chip">paid ads</span><span class="chip">board games</span><span class="chip">public profiles</span></div>
+  <h4>Left for later, on purpose</h4>
+  <div data-cid="f-later" data-label="Later"><span class="chip">an iPhone app</span><span class="chip">a public beta</span><span class="chip">an email waiting list</span><span class="chip">paid ads</span><span class="chip">board games</span><span class="chip">public user profiles</span></div>
 </section>
 
 <!-- ================================================================ SOURCES -->
 <section id="sources" data-title="Sources" style="border-bottom:0">
-  <div class="eyebrow">Where the numbers come from</div>
-  <h2>Sources.</h2>
-  <p class="sub">Collected on 22 November 2026. Figures taken from search summaries, not the page itself, are worth a click before they go in a post.</p>
+  <h2>Sources</h2>
+  <p class="sub">Where the numbers on this page come from. Collected on 22 November 2026. Some figures were taken from search summaries and not from the page itself, so check a figure before using it in a post.</p>
   <details class="srcs"><summary>Show the 35 sources</summary>
   <ol class="src" style="margin-top:16px">
     <li><a href="https://techcrunch.com/2026/07/02/popular-tv-tracking-app-tv-time-is-shutting-down-as-company-focuses-on-ai" target="_blank" rel="noopener">TechCrunch: TV Time is shutting down</a></li>
@@ -1211,14 +1272,18 @@ function paint() {
 }
 
 /* ------------------------------------------------------------ charts */
+// A chart whose box is not on the page is skipped, so a section can drop a chart.
 function hbars(id, rows, max) {
+  if (!$(id)) return;
   $(id).innerHTML = rows.map((r) => `<div class="hb ${r.cls || ''}" data-cid="${id.slice(1)}-${r.k}" data-label="${esc(r.label)}" data-tip="${esc(r.tip)}">
     <div class="lab">${esc(r.label)}<small>${esc(r.sub || '')}</small></div><div class="trk"><div class="b" style="width:${(r.v / max) * 78}%"></div><span class="v">${esc(r.text)}</span></div></div>`).join('');
 }
 function cols(id, rows, max) {
-  $(id).innerHTML = `<div class="cols">${rows.map((r) => `<div class="col ${r.cls || ''}" data-tip="${esc(r.tip)}"><span class="v">${esc(r.text)}</span><div class="b" style="height:${(r.v / max) * 82}%"></div></div>`).join('')}</div><div class="colx">${rows.map((r) => `<span>${esc(r.label)}</span>`).join('')}</div>`;
+  if (!$(id)) return;
+  $(id).innerHTML =`<div class="cols">${rows.map((r) => `<div class="col ${r.cls || ''}" data-tip="${esc(r.tip)}"><span class="v">${esc(r.text)}</span><div class="b" style="height:${(r.v / max) * 82}%"></div></div>`).join('')}</div><div class="colx">${rows.map((r) => `<span>${esc(r.label)}</span>`).join('')}</div>`;
 }
 function funnel(id, rows) {
+  if (!$(id)) return;
   const max = rows[0].v;
   $(id).innerHTML = rows.map((r) => `<div class="fn" data-cid="${id.slice(1)}-${r.k}" data-label="${esc(r.label)}"><div class="lab">${esc(r.label)}</div><div><span class="b" style="width:${Math.max((r.v / max) * 62, 0.6)}%"></span><span class="v">${r.v.toLocaleString('en-GB')}</span><span class="r">${esc(r.rate)}</span></div></div>`).join('');
 }
@@ -1494,6 +1559,8 @@ const pref = LS.get('fx-plan-panel');
 if (pref === '0' || (pref === null && innerWidth < 900)) document.body.classList.add('cp-closed');
 if (LS.get('fx-plan-details') === '1') { document.body.classList.add('details'); $('#btn-details').classList.add('on'); }
 renderLists(); renderCharts(); renderGantt(); renderTelemetry();
+// A draft with a length limit says how long it is: <b data-max="30">text</b>.
+for (const el of $$('[data-max]')) el.insertAdjacentHTML('afterend', `<small class="cc">${el.textContent.length} of ${el.dataset.max} characters</small>`);
 save(); // writes the merge with comments.js back to this browser, then draws
 if (location.hash) $(location.hash)?.scrollIntoView();
 restoreFolder();
