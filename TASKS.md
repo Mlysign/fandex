@@ -29,7 +29,7 @@ Five items. Everything else in this file is work I can do without him, and every
 
 ## Launch: Fandex and the Android app together 🔵
 
-**Planned 2026-11-22: the plan is the page in `docs/release-plan/`** (`Open release plan.cmd`), with the market data, the message, every asset, channel and admin step, each with an owner, a date and a status. Target: Tuesday 2027-02-16, if the D-U-N-S number is there by mid-December. **Waiting on Nils:** the six decisions at the top of the page, and his comments on it (`docs/release-plan/comments.json`). The bullets below are the same work in less detail; the page is the list that gets updated.
+**Planned 2026-11-22: the plan is the page `docs/release-plan/index.html`** (double-click it), with the market data, the message, every asset, channel and admin step, each with an owner, a date and a status. Target: Tuesday 2027-02-16, if the D-U-N-S number is there by mid-December. **Waiting on Nils:** the six decisions at the top of the page, and his comments on it (he pastes them from the page's "Copy for Claude"). The bullets below are the same work in less detail; the page is the list that gets updated.
 
 One launch, on the day the native app goes live on Google Play (item 2), so every post can point at both fandex.org and the store page. It is also the answer to item 6: Google has not fetched the site because nothing links to it.
 

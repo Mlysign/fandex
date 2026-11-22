@@ -43,8 +43,6 @@ p{margin:0 0 10px}
 .tbtn:hover{background:var(--hi)}
 .tbtn.on{background:var(--gold);color:#100E0C;border-color:var(--gold)}
 .tbtn b{font-weight:600;color:var(--gold)}.tbtn.on b{color:#100E0C}
-#banner{display:none;background:#3a2414;border-bottom:1px solid var(--warn);color:#f6dcc0;padding:10px 20px;font-size:13.5px}
-#banner.show{display:block}
 
 /* layout */
 main{max-width:1120px;margin:0 auto;padding:0 28px 120px;transition:margin .2s}
@@ -289,9 +287,9 @@ body.cp-closed #cpanel{display:none}
     <a href="#glance">At a glance</a><a href="#market">Market</a><a href="#strategy">Strategy</a><a href="#schedule">Schedule</a><a href="#assets">Assets</a><a href="#channels">Channels</a><a href="#admin">Admin</a><a href="#product">App</a><a href="#goals">Goals</a><a href="#forgot">Easy to forget</a><a href="#sources">Sources</a>
   </nav>
   <button class="tbtn" id="btn-mode" title="Then click any chart, image, card or row. Shortcut: C">Comment on a block</button>
+  <button class="tbtn" id="btn-copy" title="Copies every comment and status, ready to paste into the chat with Claude">Copy for Claude <b id="new-n"></b></button>
   <button class="tbtn" id="btn-panel">Comments <b id="open-n">0</b></button>
 </header>
-<div id="banner">Read-only right now. Comments and status changes are saved by a small local server. Double-click <b>Open release plan.cmd</b> in <span class="mono">docs/release-plan</span> to start it.</div>
 
 <main id="doc" data-cid="doc">
 
@@ -729,6 +727,7 @@ body.cp-closed #cpanel{display:none}
 <div id="toast"></div>
 
 <script src="plan-data.js"></script>
+<script src="comments.js"></script>
 <script>
 (() => {
 'use strict';
@@ -744,15 +743,50 @@ const TODAY = iso(new Date(Date.now() - new Date().getTimezoneOffset() * 60000))
 const ST = { todo: ['○', 'To do'], doing: ['◐', 'Doing'], done: ['✓', 'Done'], blocked: ['✕', 'Blocked'], waiting: ['…', 'Waiting'] };
 const CYCLE = ['todo', 'doing', 'done', 'blocked', 'waiting'];
 const AREAS = { admin: 'Admin', product: 'App', assets: 'Assets', channels: 'Channels' };
-const API = location.protocol === 'file:' ? null : '';
+const KEY = 'fandex-release-plan-v1';
+const now = () => new Date().toISOString();
+const newId = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+const later = (a, b) => ((a || '') >= (b || '') ? a : b);
 
+// Two copies of the comments exist: this browser's (localStorage, written on every
+// change) and comments.js (written by Claude, with its replies). Every load merges
+// them: a comment is matched by id, the copy changed last wins, replies are united.
+function merge(a, b) {
+  const byId = new Map();
+  for (const c of [...(a.comments || []), ...(b.comments || [])]) {
+    const old = byId.get(c.id);
+    if (!old) { byId.set(c.id, structuredClone(c)); continue; }
+    const win = (c.updated || c.created || '') > (old.updated || old.created || '') ? c : old;
+    const replies = new Map([...(old.replies || []), ...(c.replies || [])].map((r) => [r.id || r.created + r.author, r]));
+    const merged = { ...structuredClone(win), touched: later(old.touched, c.touched) };
+    if (!merged.deleted) merged.replies = [...replies.values()].sort((x, y) => x.created.localeCompare(y.created));
+    byId.set(c.id, merged);
+  }
+  const status = { ...(a.status || {}) };
+  for (const [k, v] of Object.entries(b.status || {})) if (!status[k] || (v.t || '') > (status[k].t || '')) status[k] = v;
+  return { comments: [...byId.values()].sort((x, y) => (x.created || '').localeCompare(y.created || '')), status };
+}
+// Storage can be off (a private window with it blocked, a preview pane). The page
+// still works then, it just forgets, and says so.
+const LS = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); return true; } catch { return false; } },
+};
+function readLocal() { try { return JSON.parse(LS.get(KEY)) || {}; } catch { return {}; } }
+const fromFile = window.PLAN_COMMENTS || {};
+let store = merge(readLocal(), fromFile);
 let state = { comments: [], status: {} };
-let live = false, lastRaw = '', tab = 'open', draft = null;
+function save() {
+  if (!LS.set(KEY, JSON.stringify(store))) toast('Not saved: this window does not allow storage. Open the file in Chrome.');
+  state = { comments: store.comments.filter((c) => !c.deleted), status: store.status };
+  refresh();
+}
+let tab = 'open', draft = null;
 const doc = $('#doc');
 
 /* ------------------------------------------------------------ status */
 const defaults = Object.fromEntries(P.items.map((i) => [i.id, i.status]));
-const statusOf = (k) => state.status[k] || defaults[k] || $(`.pill[data-key="${k}"]`)?.dataset.default || 'todo';
+const statusOf = (k) => state.status[k]?.s || defaults[k] || $(`.pill[data-key="${k}"]`)?.dataset.default || 'todo';
 
 function rowHtml(it) {
   const body = it.area === 'channels'
@@ -938,10 +972,10 @@ function renderPanel() {
     <div class="th-where" data-act="jump">${esc(c.where || 'Plan')}${anchorEl(c.anchor) ? '' : ' · no longer in the plan'}</div>
     ${c.quote ? `<blockquote class="th-q" data-act="jump">${esc(c.quote)}</blockquote>` : ''}
     ${msg(c)}${(c.replies || []).map(msg).join('')}
-    ${live ? `<textarea data-reply="${c.id}" rows="1" placeholder="Reply"></textarea>
-    <div class="th-act"><button class="btn" data-act="reply">Reply</button><button class="btn" data-act="${c.status === 'resolved' ? 'reopen' : 'resolve'}">${c.status === 'resolved' ? 'Reopen' : 'Resolve'}</button><button class="btn right" data-act="delete">Delete</button></div>` : ''}</div>`).join('');
+    <textarea data-reply="${c.id}" rows="1" placeholder="Reply"></textarea>
+    <div class="th-act"><button class="btn" data-act="reply">Reply</button><button class="btn" data-act="${c.status === 'resolved' ? 'reopen' : 'resolve'}">${c.status === 'resolved' ? 'Reopen' : 'Resolve'}</button><button class="btn right" data-act="delete">Delete</button></div></div>`).join('');
   if (!list.length && !draft) html += tab === 'open'
-    ? `<div class="cp-help"><p><b style="color:var(--tx)">No open comments.</b></p><p>Select any text in the plan and press <b style="color:var(--gold)">Comment</b>.</p><p>For a chart, picture, card or row: press <kbd>C</kbd>, then click it.</p><p>Comments are saved straight away to <span class="mono">docs/release-plan/comments.json</span>, where Claude reads and answers them.</p></div>`
+    ? `<div class="cp-help"><p><b style="color:var(--tx)">No open comments.</b></p><p>Select any text in the plan and press <b style="color:var(--gold)">Comment</b>.</p><p>For a chart, picture, card or row: press <kbd>C</kbd>, then click it.</p><p>Everything is saved in this browser the moment you write it, and is still here after a restart.</p><p>When you want answers, press <b style="color:var(--gold)">Copy for Claude</b> and paste into the chat. The replies show up here after a refresh.</p></div>`
     : `<div class="cp-help">Nothing resolved yet.</div>`;
   body.innerHTML = html;
   for (const [id, v] of Object.entries(keep)) { const t = $(`textarea[data-reply="${id}"]`, body); if (t) t.value = v; }
@@ -949,24 +983,17 @@ function renderPanel() {
   const ct = $('#composer-text');
   if (ct) { if (composing) ct.value = composing; if (compFocus || composing === null) ct.focus(); }
 }
-function refresh() { clearMarks(); paint(); applyMarks(); renderPanel(); }
+// What Nils wrote or changed since he last pressed "Copy for Claude".
+function newCount() {
+  const since = LS.get(KEY + ':copied') || '';
+  return store.comments.filter((c) => (c.touched || '') > since).length + Object.values(store.status).filter((v) => v.by === 'Nils' && (v.t || '') > since).length;
+}
+function refresh() {
+  clearMarks(); paint(); applyMarks(); renderPanel();
+  const n = newCount(); $('#new-n').textContent = n || ''; $('#btn-copy').classList.toggle('on', n > 0);
+}
 
 function toast(t) { const el = $('#toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => (el.style.display = 'none'), 2600); }
-async function call(method, path, body) {
-  if (!live) { toast('Read-only: start the server to save.'); throw new Error('offline'); }
-  const r = await fetch(API + path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
-  if (!r.ok) { toast('Could not save. Is the server still running?'); throw new Error(String(r.status)); }
-  return r.json();
-}
-async function load() {
-  const r = await fetch(API + '/api/state', { cache: 'no-store' });
-  if (!r.ok) throw new Error(String(r.status));
-  const raw = await r.text();
-  if (raw === lastRaw) return false;
-  lastRaw = raw; state = JSON.parse(raw); return true;
-}
-async function reload() { try { if (await load()) refresh(); } catch { /* the next poll tries again */ } }
-
 function compose(el, quote, occ) {
   draft = { anchor: el.dataset.cid, where: whereOf(el), quote: quote || '', occ: occ || 0 };
   document.body.classList.remove('cp-closed', 'cmode'); $('#btn-mode').classList.remove('on');
@@ -1024,56 +1051,57 @@ doc.addEventListener('click', (e) => {
   const p = e.target.closest('.pill[data-key]');
   if (p) {
     const k = p.dataset.key, next = CYCLE[(CYCLE.indexOf(statusOf(k)) + (e.shiftKey ? CYCLE.length - 1 : 1)) % CYCLE.length];
-    const before = state.status[k];
-    state.status[k] = next; refresh();
-    call('PUT', '/api/status/' + k, { status: next }).then(reload).catch(() => { if (before) state.status[k] = before; else delete state.status[k]; refresh(); });
+    store.status[k] = { s: next, t: now(), by: 'Nils' }; save();
   }
 }, true);
 
 // the panel
-$('#btn-panel').addEventListener('click', () => { document.body.classList.toggle('cp-closed'); localStorage.setItem('fx-plan-panel', document.body.classList.contains('cp-closed') ? '0' : '1'); });
+$('#btn-panel').addEventListener('click', () => { document.body.classList.toggle('cp-closed'); LS.set('fx-plan-panel', document.body.classList.contains('cp-closed') ? '0' : '1'); });
 $('.cp-tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { tab = b.dataset.tab; setTabs(); renderPanel(); } });
-async function saveDraft() {
+function saveDraft() {
   const text = $('#composer-text').value.trim(); if (!text) return;
-  const d = draft;
-  try { await call('POST', '/api/comments', { anchor: d.anchor, where: d.where, quote: d.quote, occ: d.occ, text }); draft = null; $('#composer-text').value = ''; await reload(); renderPanel(); } catch { /* toast already shown */ }
+  const t = now();
+  store.comments.push({ id: newId('c'), status: 'open', author: 'Nils', created: t, updated: t, touched: t, where: draft.where, anchor: draft.anchor, quote: draft.quote, occ: draft.occ, text, replies: [] });
+  draft = null; $('#composer-text').value = ''; save();
 }
 $('#cp-body').addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey)) return;
   if (e.target.id === 'composer-text') saveDraft();
   else if (e.target.dataset.reply) e.target.closest('.th').querySelector('[data-act="reply"]').click();
 });
-$('#cp-body').addEventListener('click', async (e) => {
+$('#cp-body').addEventListener('click', (e) => {
   const act = e.target.closest('[data-act]')?.dataset.act; if (!act) return;
   if (act === 'save') return saveDraft();
   if (act === 'cancel') { draft = null; $('#composer-text').value = ''; return renderPanel(); }
-  const th = e.target.closest('.th'), id = th.dataset.id, c = state.comments.find((x) => x.id === id);
+  const th = e.target.closest('.th'), id = th.dataset.id, c = store.comments.find((x) => x.id === id);
   if (act === 'jump') { const el = anchorEl(c.anchor); return flash($(`mark.cm[data-c="${id}"]`, doc) || (el === doc ? null : el)); }
-  try {
-    if (act === 'reply') { const t = $('textarea', th); if (!t.value.trim()) return t.focus(); await call('POST', `/api/comments/${id}/replies`, { text: t.value }); t.value = ''; }
-    if (act === 'resolve') await call('PATCH', `/api/comments/${id}`, { status: 'resolved' });
-    if (act === 'reopen') await call('PATCH', `/api/comments/${id}`, { status: 'open' });
-    if (act === 'delete') { if (!confirm('Delete this comment and its replies?')) return; await call('DELETE', `/api/comments/${id}`); }
-    await reload();
-  } catch { /* toast already shown */ }
+  const t = now();
+  if (act === 'reply') { const box = $('textarea', th); if (!box.value.trim()) return box.focus(); c.replies.push({ id: newId('r'), author: 'Nils', created: t, text: box.value.trim() }); c.status = 'open'; box.value = ''; }
+  if (act === 'resolve') c.status = 'resolved';
+  if (act === 'reopen') c.status = 'open';
+  // A deleted comment stays behind as an empty marker, so comments.js can't bring it back.
+  if (act === 'delete') { if (!confirm('Delete this comment and its replies?')) return; store.comments[store.comments.indexOf(c)] = { id, deleted: true, created: c.created }; }
+  const cur = store.comments.find((x) => x.id === id); cur.updated = t; cur.touched = t;
+  save();
 });
 
-/* --------------------------------------------------------------- boot */
-(async () => {
-  const pref = localStorage.getItem('fx-plan-panel');
-  if (pref === '0' || (pref === null && innerWidth < 900)) document.body.classList.add('cp-closed');
-  renderLists(); renderCharts(); renderGantt();
-  if (API === null) {
-    // Opened as a file: hop to the server if it is up, where saving works.
-    try { await fetch('http://127.0.0.1:4777/api/ping', { mode: 'no-cors' }); location.replace('http://127.0.0.1:4777/' + location.hash); return; } catch { /* not running */ }
-  } else {
-    try { await load(); live = true; } catch { /* served without the API */ }
+// Hand the comments to Claude: one click, then paste into the chat.
+$('#btn-copy').addEventListener('click', async () => {
+  const text = 'Fandex release plan, my comments and statuses:\n' + JSON.stringify({ exported: now(), comments: store.comments, status: store.status });
+  try { await navigator.clipboard.writeText(text); } catch {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
   }
-  if (!live) $('#banner').classList.add('show');
-  refresh();
-  if (location.hash) $(location.hash)?.scrollIntoView();
-  if (live) { setInterval(() => { if (!document.hidden) reload(); }, 4000); document.addEventListener('visibilitychange', () => { if (!document.hidden) reload(); }); }
-})();
+  LS.set(KEY + ':copied', now()); refresh(); toast('Copied. Paste it into the chat with Claude.');
+});
+// Another tab of this page changed something.
+addEventListener('storage', (e) => { if (e.key === KEY) { store = merge(readLocal(), fromFile); save(); } });
+
+/* --------------------------------------------------------------- boot */
+const pref = LS.get('fx-plan-panel');
+if (pref === '0' || (pref === null && innerWidth < 900)) document.body.classList.add('cp-closed');
+renderLists(); renderCharts(); renderGantt();
+save(); // writes the merge with comments.js back to this browser, then draws
+if (location.hash) $(location.hash)?.scrollIntoView();
 })();
 </script>
 </body>
