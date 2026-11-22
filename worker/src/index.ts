@@ -46,9 +46,9 @@ import {
   setTagOverrides, dismissSuggestion, dismissedJson, parseDismissal, undismissSuggestion, type AliasTable,
 } from "./adminScoring";
 import { clearedSessionCookie, createSession, readSession, bumpSessionEpoch, sessionCookie, type Session } from "./auth/session";
-import { completeMerge, MergesExhausted, signIn, type SignInOutcome } from "./auth/signin";
+import { completeMerge, MergesExhausted, signIn, SignupsClosed, type SignInOutcome } from "./auth/signin";
 import { IdentityRejected, steamProfileName, verifyDiscordToken, verifyGoogleIdToken, verifySteamOpenId, verifyTraktToken, type VerifiedIdentity } from "./auth/verify";
-import { capFrom, kvGet, kvSet, spend, spent } from "./budget";
+import { capFrom, kvGet, kvSet, spend, spendSoft, spent } from "./budget";
 import { calendarMonth, validMonth } from "./calendar";
 import {
   catalogDeltaJson, catalogPlatformsJson, itemDetailJson, parseCursor, parseItemIds, regionalReleaseDatesJson, RELEASE_DATES_MAX, seasonPremieresJson,
@@ -93,8 +93,10 @@ const CATALOG_CACHE = { "Cache-Control": "public, max-age=300" };
 const PRIVATE = { "Cache-Control": "private, no-store" };
 /** Films the release-dates route answers per UTC day, across everybody. A film is up to twenty row reads. */
 const DEFAULT_DAILY_DATES_CAP = 200_000;
-/** What one lookup call costs at least. Each call is a row write, so 300,000 one-ref calls were three days of writes. */
+/** What one lookup call costs at least, however few refs it carries. */
 const LOOKUP_MIN_UNITS = 20;
+/** What one release-dates call costs at least, however few films it asks about. */
+const DATES_MIN_UNITS = 20;
 /** Data exports one account may ask for per UTC day. Each reads every row it holds. */
 const DAILY_EXPORTS_PER_USER = 10;
 
@@ -111,6 +113,7 @@ export default {
       if (e instanceof BodyError) response = error(e.status, e.status === 413 ? "payload-too-large" : "bad-request", e.message);
       else if (e instanceof BadRequest) response = error(400, "bad-request", e.message);
       else if (e instanceof MergesExhausted) response = error(503, "budget-exhausted", "Fandex cannot join more accounts until tomorrow (UTC).");
+      else if (e instanceof SignupsClosed) response = error(503, "signups-closed", "Fandex is not taking new accounts right now. Try again tomorrow.");
       else {
         console.error("unhandled", { path: c.url.pathname, error: e instanceof Error ? e.stack ?? e.message : String(e) });
         response = error(500, "internal");
@@ -153,7 +156,7 @@ async function route(c: Ctx): Promise<Response> {
     // Open to anybody and up to ~400 rows read a page, so a script looping on it
     // could spend the day's 5M reads and stop every query until midnight UTC.
     if (!(await allow(c.env.RL_READ, `delta:${clientIp(request)}`))) return error(429, "rate-limited");
-    if (!(await spend(c.env.DB, "delta_pages", capFrom(c.env.DAILY_DELTA_CAP, DEFAULT_DAILY_DELTA_CAP)))) {
+    if (!spendSoft(c.env.DB, "delta_pages", capFrom(c.env.DAILY_DELTA_CAP, DEFAULT_DAILY_DELTA_CAP), 1, c.defer)) {
       return error(503, "budget-exhausted", "The catalog cannot be synced again until tomorrow (UTC).");
     }
     const body = await catalogDeltaJson(
@@ -202,7 +205,7 @@ async function route(c: Ctx): Promise<Response> {
     if (!(await allow(c.env.RL_RESOLVE, `dates:${clientIp(request)}`))) return error(429, "rate-limited");
     // A limiter alone let a handful of addresses read the day away, up to
     // twenty rows a film (audit, 2026-11-22). Counted in films asked about.
-    if (!(await spend(c.env.DB, "date_films", capFrom(c.env.DAILY_DATES_CAP, DEFAULT_DAILY_DATES_CAP), ids.length))) {
+    if (!spendSoft(c.env.DB, "date_films", capFrom(c.env.DAILY_DATES_CAP, DEFAULT_DAILY_DATES_CAP), Math.max(ids.length, DATES_MIN_UNITS), c.defer)) {
       return error(503, "budget-exhausted", "Fandex cannot answer more release dates until tomorrow (UTC).");
     }
     const region = typeof body?.region === "string" ? body.region : null;
@@ -241,7 +244,7 @@ async function route(c: Ctx): Promise<Response> {
     // Two primary-key reads a ref and no sign-in needed: the cheapest way to
     // spend the day's reads, so both a limiter and a daily count of refs.
     if (!(await allow(c.env.RL_READ, `lookup:${clientIp(request)}`))) return error(429, "rate-limited");
-    if (!(await spend(c.env.DB, "lookup_refs", capFrom(c.env.DAILY_LOOKUP_CAP, DEFAULT_DAILY_LOOKUP_CAP), Math.max(refs.length, LOOKUP_MIN_UNITS)))) {
+    if (!spendSoft(c.env.DB, "lookup_refs", capFrom(c.env.DAILY_LOOKUP_CAP, DEFAULT_DAILY_LOOKUP_CAP), Math.max(refs.length, LOOKUP_MIN_UNITS), c.defer)) {
       return error(503, "budget-exhausted", "Fandex cannot look up more titles until tomorrow (UTC).");
     }
     return json(await lookupRefsJson(c.env.DB, refs, { facets }), 200, { "Cache-Control": "no-store" });

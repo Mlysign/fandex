@@ -24,6 +24,8 @@ async function setup() {
   add('digger', 'movie', '2026-09-28');
   add('alien', 'movie', '1979-05-25');
   add('severance', 'show', '2022-02-18');
+  // Alien is on a list of yours, which is what makes a film from 1979 worth asking about.
+  raw.prepare("INSERT INTO item_state (media_item_id, source, relation, added_at, updated_at) VALUES ('alien', 'local', 'library', 0, 0)").run();
   const dateOf = (id: string) => (raw.prepare('SELECT release_date d FROM catalog WHERE id = ?').get(id) as { d: string | null }).d;
   return { db, raw, dateOf };
 }
@@ -74,6 +76,19 @@ describe("a film's date in your country", () => {
     expect(await filmsToAsk(db, 'DE', now + 4 * 86_400, 100)).toEqual(['digger']);
     expect((await filmsToAsk(db, 'DE', now + 31 * 86_400, 100)).sort()).toEqual(['alien', 'digger']);
     vi.useRealTimers();
+  });
+
+  it('leaves an old film alone until it is on one of your lists', async () => {
+    const { db, raw } = await setup();
+    const now = Math.floor(Date.parse('2026-10-17T12:00:00Z') / 1000);
+    raw.prepare(`INSERT INTO catalog (id, type, title, norm_title, release_date, world_date, updated_at, vector, facets)
+                 VALUES ('heat', 'movie', 'heat', 'heat', '1995-12-15', '1995-12-15', 0, '{}', '[]'),
+                        ('soon', 'movie', 'soon', 'soon', '2028-05-01', '2028-05-01', 0, '{}', '[]'),
+                        ('undated', 'movie', 'undated', 'undated', NULL, NULL, 0, '{}', '[]')`).run();
+    // A film to come, a recent one, an undated one and the old one on a list. Not the old one nobody added.
+    expect((await filmsToAsk(db, 'DE', now, 100)).sort()).toEqual(['alien', 'digger', 'soon', 'undated']);
+    raw.prepare("INSERT INTO item_state (media_item_id, source, relation, added_at, updated_at) VALUES ('heat', 'local', 'wishlist', 0, 0)").run();
+    expect(await filmsToAsk(db, 'DE', now, 100)).toContain('heat');
   });
 
   it('stops on a rate limit and keeps what landed', async () => {

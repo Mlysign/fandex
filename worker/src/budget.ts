@@ -40,6 +40,78 @@ const exhausted = new Map<string, string>();
 /** For tests: a fresh isolate's view. */
 export function forgetExhausted(): void {
   exhausted.clear();
+  soft.clear();
+}
+
+// ── Read caps: counted here, written now and then ────────────────────────────
+
+/**
+ * `spend` for a cap on READS, where one row write per call was the larger cost.
+ *
+ * A catalog page, a lookup and a release-dates call each read rows and wrote
+ * one: the counter. In the rehearsal of a launch hour (2026-11-22) those
+ * counters were a fifth of everything written. Here the count gathers in the
+ * isolate and is written at most every SOFT_FLUSH_MS, one row for however many
+ * calls came in between, the way the usage counters do it (usage.ts).
+ *
+ * What that costs: the cap becomes approximate. An isolate knows the day's
+ * total as of its own last write, so the total can pass the cap by what all
+ * isolates took in since. For a cap on reads that is fine: it is a budget, and
+ * running thirty seconds over is far from the limit it protects. It is NOT
+ * for anything that writes rows or calls a provider; those stay on `spend`.
+ *
+ * Answers at once and never throws. The write rides on `defer` (ctx.waitUntil).
+ */
+export function spendSoft(db: D1Database, kind: string, cap: number, units: number, defer: (p: Promise<unknown>) => void): boolean {
+  const day = utcDay();
+  if (exhausted.get(kind) === day) return false;
+  let s = soft.get(kind);
+  if (!s || s.day !== day) {
+    s = { day, known: 0, pending: 0, inFlight: 0, lastFlush: 0, flushing: false, cap };
+    soft.set(kind, s);
+  }
+  s.cap = cap;
+  s.pending += units;
+  // Counted first and checked after, as `spend` does.
+  // `inFlight` is what is being written right now: counted, though the day's
+  // total has not come back with it yet.
+  const ok = s.known + s.inFlight + s.pending <= cap;
+  if (!ok) exhausted.set(kind, day);
+  if (!ok || Date.now() - s.lastFlush >= SOFT_FLUSH_MS) defer(flushSoft(db, kind));
+  return ok;
+}
+
+const SOFT_FLUSH_MS = 30_000;
+interface SoftCount { day: string; known: number; pending: number; inFlight: number; lastFlush: number; flushing: boolean; cap: number }
+const soft = new Map<string, SoftCount>();
+
+/** Write what one kind has gathered, and learn the day's total from the answer. */
+async function flushSoft(db: D1Database, kind: string): Promise<void> {
+  const s = soft.get(kind);
+  if (!s || s.flushing || s.pending <= 0) return;
+  s.flushing = true;
+  const units = s.pending;
+  s.pending = 0;
+  s.inFlight = units;
+  s.lastFlush = Date.now();
+  try {
+    const row = await first<{ n: number }>(
+      db,
+      `INSERT INTO daily_budget (day, kind, n) VALUES (?, ?, ?)
+       ON CONFLICT(day, kind) DO UPDATE SET n = n + excluded.n
+       RETURNING n`,
+      [s.day, kind, units],
+    );
+    // What every isolate has written today, this one's share included.
+    s.known = row?.n ?? s.known + units;
+    if (s.known > s.cap) exhausted.set(kind, s.day);
+  } catch {
+    // Not written: it stays counted here and goes out with the next write.
+    s.pending += units;
+  } finally {
+    s.inFlight = 0;
+    s.flushing = false;
+  }
 }
 
 /** Today's count for `kind`, without spending. */

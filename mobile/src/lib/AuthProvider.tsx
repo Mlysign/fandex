@@ -179,6 +179,9 @@ function signInMessage(e: unknown, provider: 'Trakt' | 'Google' | 'Discord' | 'S
       case 'identity-rejected': return `${provider} did not confirm the sign-in. Try again.`;
       case 'provider-unavailable': return `${provider} is not answering right now. Try again in a minute.`;
       case 'rate-limited': return 'Too many attempts. Give it a minute.';
+      // The Worker's switches for a day its budgets cannot carry (worker/src/auth/signin.ts).
+      case 'signups-closed': return 'Fandex is not taking new accounts right now. Try again tomorrow.';
+      case 'budget-exhausted': return 'Fandex cannot join accounts right now. Try again tomorrow.';
       // Reached only from an older Worker that sends no account sides: a
       // merge the form can show never throws (see adoptMerge).
       case 'merge-required':

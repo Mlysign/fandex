@@ -29,7 +29,10 @@ export interface Env {
 
   // Plain vars (wrangler.jsonc).
   ALLOWED_ORIGINS: string;
-  DAILY_FETCH_CAP: string;
+  /** New catalog rows the Worker may create per UTC day. Optional; catalog/resolve.ts has the default. */
+  DAILY_FETCH_CAP?: string;
+  /** "1" stops NEW accounts from being created (auth/signin.ts). Existing ones sign in as before. */
+  SIGNUPS_OFF?: string;
   /** Counted pageviews allowed per UTC day. Optional; telemetry.ts has the default. */
   DAILY_PAGEVIEW_CAP?: string;
   /** "1" switches the usage counters on (usage.ts). Anything else, or unset, is off. */

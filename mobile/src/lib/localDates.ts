@@ -26,7 +26,8 @@ export const DATE_REGION_KEY = 'date_region';
 const CHUNK = 200;
 /**
  * Requests per run. The route allows 30 a minute per address and the calendar
- * shares it; 1,376 films (2026-10-17) is seven.
+ * shares it. Since 2026-11-22 only the films that can matter are asked about
+ * (`filmsToAsk`), which is one or two requests on a new device.
  */
 const MAX_REQUESTS = 10;
 const DAY = 86_400;
@@ -66,18 +67,31 @@ async function applyDates(db: SQLiteDatabase, region: string, ids?: string[]): P
   );
 }
 
-/** The films whose date in `region` is unknown or due another look, newest first. Pure SQL, exported for its test. */
+/**
+ * The films whose date in `region` is unknown or due another look, newest
+ * first. Pure SQL, exported for its test.
+ *
+ * Only the films where the local day can matter: one that is still to come or
+ * came out within the last year, one with no date yet, and any film in your
+ * own lists however old. Until 2026-11-22 it was every film in the catalog,
+ * 3,705 of them: nineteen requests on a new device and most of the rows a new
+ * user made the database read, for dates that differ by a day or two on films
+ * from decades ago. An old film outside your lists shows the worldwide day
+ * until you add it, and is asked about then.
+ */
 export async function filmsToAsk(db: SQLiteDatabase, region: string, now: number, limit: number): Promise<string[]> {
   const yearAgo = new Date((now - 365 * DAY) * 1000).toISOString().slice(0, 10);
   const rows = await db.getAllAsync<{ id: string }>(
     `SELECT c.id FROM catalog c
        LEFT JOIN regional_date r ON r.region = ? AND r.media_item_id = c.id
       WHERE c.type = 'movie'
+        AND (c.world_date IS NULL OR c.world_date >= ?
+             OR EXISTS (SELECT 1 FROM item_state s WHERE s.media_item_id = c.id))
         AND (r.checked_at IS NULL
              OR r.checked_at < ? - (CASE WHEN c.world_date IS NOT NULL AND c.world_date < ? THEN ? ELSE ? END))
       ORDER BY c.world_date IS NULL, c.world_date DESC
       LIMIT ?`,
-    [region, now, yearAgo, TTL_SETTLED, TTL_MOVING, limit],
+    [region, yearAgo, now, yearAgo, TTL_SETTLED, TTL_MOVING, limit],
   );
   return rows.map((r) => r.id);
 }

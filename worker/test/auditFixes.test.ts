@@ -2,7 +2,7 @@ import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
 import { beforeEach, describe, expect, it } from "vitest";
 import { deleteAccount, disconnectIdentity, mergeAccounts } from "../src/account";
 import { createSession } from "../src/auth/session";
-import { DAILY_MERGES_PER_ACCOUNT, MergesExhausted, signIn } from "../src/auth/signin";
+import { DAILY_MERGES_PER_ACCOUNT, MergesExhausted, signIn, SignupsClosed } from "../src/auth/signin";
 import worker from "../src/index";
 import { applyStateWrite, REVIEW_CHARS_PER_UNIT, SMALL_SAVE_MAX_UNITS, stateWriteSize, type StateWrite } from "../src/me";
 import { count, db, env, wipe } from "./helpers";
@@ -70,6 +70,21 @@ describe("merging two accounts that were both used", () => {
     await db.prepare("INSERT INTO daily_budget (day, kind, n) VALUES (?, ?, ?)").bind(new Date().toISOString().slice(0, 10), `merges:${B}`, DAILY_MERGES_PER_ACCOUNT).run();
     const identity = { provider: "discord" as const, providerUserId: "d-b", displayName: null, avatarUrl: null };
     await expect(signIn(env, identity, { userId: A, provider: "google", displayName: null })).rejects.toBeInstanceOf(MergesExhausted);
+  });
+});
+
+describe("the switch for new accounts", () => {
+  it("refuses a new account while it is on, and lets existing ones in", async () => {
+    await twoAccounts();
+    const closed = { ...env, SIGNUPS_OFF: "1" } as typeof env;
+    const stranger = { provider: "google" as const, providerUserId: "g-new", displayName: null, avatarUrl: null };
+    await expect(signIn(closed, stranger, null)).rejects.toBeInstanceOf(SignupsClosed);
+    expect(await count("users")).toBe(2);
+    // Somebody who has an account signs in as ever, and can still connect a new way in.
+    const known = { provider: "google" as const, providerUserId: "g-a", displayName: null, avatarUrl: null };
+    expect(await signIn(closed, known, null)).toMatchObject({ kind: "signed-in" });
+    const extra = { provider: "discord" as const, providerUserId: "d-new", displayName: null, avatarUrl: null };
+    expect(await signIn(closed, extra, { userId: A, provider: "google", displayName: null })).toMatchObject({ kind: "linked" });
   });
 });
 

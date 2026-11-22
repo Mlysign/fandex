@@ -55,9 +55,10 @@
     // lives on fandex.org. The Expo web dev servers on localhost are added by
     // scripts/dev-stack.mjs in .dev.vars, never here.
     "ALLOWED_ORIGINS": "https://fandex.org",
-    // New catalog rows the Worker may create per UTC day, across all callers.
-    // One created item costs about 12 row writes, so 2,000 is ~24k of the 100k.
-    "DAILY_FETCH_CAP": "2000",
+    // DAILY_FETCH_CAP is NOT here any more (2026-11-22): a name in `vars` cannot
+    // also be set with `wrangler secret put`, so it was the one cap that needed
+    // a deploy to change. Its default (2,000 new catalog rows a day) is in
+    // src/catalog/resolve.ts, and it is set like the other caps.
     // Who may open the admin pages (/dev) and call /v1/admin/*. Fandex user ids,
     // comma separated. An id is not a credential: the session still has to be theirs.
     "ADMIN_USER_IDS": "38892bb2-eacb-4ba2-8e69-5075f5a6ab73",

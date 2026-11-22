@@ -32,6 +32,14 @@ export type SignInOutcome =
   /** The accounts overlap. `mergeToken` carries the proof to POST /v1/auth/merge. */
   | { kind: "merge-required"; mergeToken: string; conflicts: MergeConflicts; mine: MergeSide; theirs: MergeSide; provider: string };
 
+/** A new account on a day new accounts are switched off. index.ts answers 503 with it. */
+export class SignupsClosed extends Error {
+  constructor() {
+    super("new accounts are switched off");
+    this.name = "SignupsClosed";
+  }
+}
+
 /** A merge the day's budget has no room for. index.ts answers 503 with it. */
 export class MergesExhausted extends Error {
   constructor() {
@@ -100,6 +108,10 @@ export async function signIn(env: Env, identity: VerifiedIdentity, current: Sess
       );
       if (has) return { kind: "provider-taken", provider: identity.provider, conflict: identity.provider };
     }
+    // The launch-day switch: with SIGNUPS_OFF set to "1" nobody new gets an
+    // account, and everybody who has one signs in and connects as before. Read
+    // at call time, like every switch.
+    if (!current && env.SIGNUPS_OFF === "1") throw new SignupsClosed();
     const userId = current?.userId ?? crypto.randomUUID();
     try {
       await db.batch([
