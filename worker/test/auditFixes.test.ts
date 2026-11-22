@@ -4,6 +4,7 @@ import { deleteAccount, disconnectIdentity, mergeAccounts } from "../src/account
 import { createSession } from "../src/auth/session";
 import { DAILY_MERGES_PER_ACCOUNT, MergesExhausted, signIn } from "../src/auth/signin";
 import worker from "../src/index";
+import { REVIEW_CHARS_PER_UNIT, stateWriteSize, type StateWrite } from "../src/me";
 import { count, db, env, wipe } from "./helpers";
 
 // What the security audit of 2026-11-22 found in the account paths, each fix
@@ -113,6 +114,16 @@ describe("signed-in reads", () => {
     }), env, ctx);
     await waitOnExecutionContext(ctx);
     expect(res.status).toBe(401);
+  });
+});
+
+describe("what a save costs", () => {
+  it("counts review text as well as rows, so long reviews are not a free way to fill the database", () => {
+    const none: StateWrite = { itemUpserts: [], itemDeletes: [], episodeUpserts: [], episodeDeletes: [], hide: [], unhide: [], followSets: [], followRemoves: [] };
+    const row = { review: null } as StateWrite["itemUpserts"][number];
+    expect(stateWriteSize({ ...none, itemUpserts: [row, row] })).toBe(2);
+    const long = { review: "x".repeat(20_000) } as StateWrite["itemUpserts"][number];
+    expect(stateWriteSize({ ...none, itemUpserts: [long] })).toBe(1 + 20_000 / REVIEW_CHARS_PER_UNIT);
   });
 });
 

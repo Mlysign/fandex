@@ -346,9 +346,17 @@ function followRow(v: unknown): FollowRow {
 }
 
 export function stateWriteSize(w: StateWrite): number {
+  // Rows, plus the text they carry. A review may be 20,000 characters, and
+  // counted as one row each, reviews were a way to fill the database's 500 MB
+  // in minutes, which does not reset at midnight (audit, 2026-11-22). A review
+  // costs one more unit per REVIEW_CHARS_PER_UNIT characters.
+  const reviewChars = w.itemUpserts.reduce((n, row) => n + (row.review?.length ?? 0), 0);
   return w.itemUpserts.length + w.itemDeletes.length + w.episodeUpserts.length +
-    w.episodeDeletes.length + w.hide.length + w.unhide.length + w.followSets.length + w.followRemoves.length;
+    w.episodeDeletes.length + w.hide.length + w.unhide.length + w.followSets.length + w.followRemoves.length +
+    Math.ceil(reviewChars / REVIEW_CHARS_PER_UNIT);
 }
+/** How much review text costs as much as one row, against the day's writes. */
+export const REVIEW_CHARS_PER_UNIT = 200;
 
 /** The titles of an item write that nobody has acted on before. `?1` is the rows, as JSON. */
 const NOT_YET_IN_POOL = "browsed = 1 AND id IN (SELECT j.value ->> 'mediaItemId' FROM json_each(?1) j)";
