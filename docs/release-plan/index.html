@@ -302,9 +302,13 @@ table.mx td.on{color:var(--ok);font-size:13px;font-weight:600}
 .mk.d .hd{color:#15120F;font-weight:600}
 .mk.d .ph2{width:56%;margin:4% auto 0;transform:rotate(-8deg);border:5px solid #111;border-radius:18px;overflow:hidden;box-shadow:0 18px 30px rgba(0,0,0,.5)}
 .fg{aspect-ratio:1024/500;display:grid;grid-template-columns:1.15fr 1fr;background:linear-gradient(135deg,#221d18,#0d0b09);border:1px solid var(--line2);border-radius:10px;overflow:hidden}
+.fg{container-type:inline-size}
 .fgt{align-self:center;padding:0 7%}
-.fgt b{display:block;font:400 clamp(26px,3.6vw,46px)/1 var(--serif);margin-bottom:8px}
-.fgt span{font:400 clamp(13px,1.5vw,18px)/1.25 var(--serif);color:var(--gold)}
+.fgt b{display:block;font:400 9cqw/1 var(--serif);margin-bottom:2cqw}
+.fgt span{display:block;font:400 4.2cqw/1.25 var(--serif);color:var(--gold)}
+table.mini-t{margin-top:6px}
+table.mini-t td{border:0;padding:3px 10px 3px 0;font-size:13px;font-weight:400;color:var(--tx2)}
+table.mini-t td:first-child{color:var(--mut);font-weight:400;white-space:nowrap}
 .fgi{overflow:hidden}
 .fgi img{display:block;width:78%;margin:8% 0 0 12%;transform:rotate(7deg);border-radius:12px;box-shadow:0 14px 34px rgba(0,0,0,.7)}
 .listing{display:flex;gap:14px;align-items:flex-start}
@@ -426,7 +430,7 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
 <header class="top">
   <div class="brand">Fandex<span>Release plan</span></div>
   <nav>
-    <a href="#glance">Overview</a><a href="#market">Market analysis</a><a href="#strategy">Marketing messages</a><a href="#schedule">Schedule</a><a href="#assets">Assets</a><a href="#channels">Channels</a><a href="#admin">Admin tasks</a><a href="#product">App work</a><a href="#telemetry">Telemetry</a><a href="#goals">Goals</a><a href="#forgot">Risks</a><a href="#sources">Sources</a>
+    <a href="#glance">Overview</a><a href="#actions">Action plan</a><a href="#market">Market analysis</a><a href="#strategy">Marketing messages</a><a href="#schedule">Schedule</a><a href="#assets">Assets</a><a href="#channels">Channels</a><a href="#admin">Admin tasks</a><a href="#product">App work</a><a href="#telemetry">Telemetry</a><a href="#goals">Goals</a><a href="#forgot">Risks</a><a href="#sources">Sources</a>
   </nav>
   <button class="tbtn" id="btn-details" title="Shows or hides the detail line under every list row. A click on a row's title opens just that one.">Details</button>
   <button class="tbtn" id="btn-mode" title="Then click any chart, image, card or row. Shortcut: C">Comment on a block</button>
@@ -450,27 +454,15 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
     <div class="card" data-cid="g-areas"><div class="k2">Tasks done, per area</div><div id="areas"></div></div>
   </div>
 
-  <h4>Decisions you need to make <span class="cnt">comment on a card, or set it to Done once decided</span></h4>
+  <h4>Decisions still open <span class="cnt">comment on a card, or set it to Done once decided</span></h4>
   <div class="grid g2">
-    <div class="card dec" data-cid="d-date" data-label="Decision: launch day">
-      <h3>Is Tuesday 16 February 2027 the launch day?</h3><button class="pill" data-key="d-date" data-default="todo"></button>
-      <p class="ans">Decided: yes (you, 22 Nov).</p>
-      <p class="ctx">If the Play account is not ready in time, the fallback is Tuesday 9 March.</p></div>
-
-    <div class="card dec" data-cid="d-lead" data-label="Decision: marketing messages">
-      <h3>Does the marketing focus on your three messages?</h3><button class="pill" data-key="d-lead" data-default="todo"></button>
-      <p class="ans">Decided: yes (you, 22 Nov).</p>
-      <p class="ctx">The three messages and their wording are in the section "Marketing messages".</p></div>
-
     <div class="card dec" data-cid="d-line" data-label="Decision: the slogan">
-      <h3>Which sentence is the main slogan?</h3><button class="pill" data-key="d-line" data-default="todo"></button>
-      <p class="ans">Decided for now: A (you, 22 Nov).</p>
-      <p class="ctx">One sentence that goes on the store page, in posts and in the video. You find the list of verbs not clean, so a better sentence may still replace it.</p>
+      <h3>Which sentence is the main slogan?</h3><button class="pill" data-key="d-line" data-default="doing"></button>
+      <p class="ctx">One sentence that goes on the store page, in posts and in the video. You chose A for now and said its list of verbs is not clean. The video you linked gave me a better candidate, E. Why is explained in "Marketing messages".</p>
       <ul class="optl">
-        <li class="rec"><b>A.</b> "One taste. Everything you watch, play and read." <em>Chosen for now</em></li>
-        <li><b>B.</b> "One taste. Every screen and page."</li>
-        <li><b>C.</b> "One taste. Films, shows, games and books."</li>
-        <li><b>D.</b> "One taste. Every medium."</li>
+        <li class="rec"><b>E.</b> "Know what's next." <em>My recommendation</em></li>
+        <li><b>A.</b> "One taste. Everything you watch, play and read." <em>Your choice for now</em></li>
+        <li><b>F.</b> "Your shows know your next book."</li>
       </ul></div>
 
     <div class="card dec" data-cid="d-art" data-label="Decision: covers in store images">
@@ -482,38 +474,32 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
       </ul>
       <p class="ctx">This is about the store page only. Posts and videos elsewhere show the app as it is. I am not a lawyer.</p></div>
 
-    <div class="card dec" data-cid="d-trader" data-label="Decision: trader status">
-      <h3>Do you register on Google Play as a trader or as a non-trader?</h3><button class="pill" data-key="d-trader" data-default="todo"></button>
-      <p class="ctx">Google requires every developer to pick one by 1 February 2027.</p>
-      <ul class="optl">
-        <li class="rec"><b>A. Trader.</b> Correct if Fandex is a business, and ads are planned. Your address and phone number are shown on the store page. <em>My recommendation</em></li>
-        <li><b>B. Non-trader.</b> Address and phone stay private. Only correct while Fandex earns nothing, and it must be changed before the first ad.</li>
-      </ul></div>
-
-    <div class="card dec" data-cid="d-track" data-label="Decision: usage data">
-      <h3>How do we collect usage data?</h3><button class="pill" data-key="d-track" data-default="todo"></button>
-      <p class="ctx">You want to see what users do in the app. The details are in the section "Telemetry".</p>
-      <ul class="optl">
-        <li class="rec"><b>A. Our own counters.</b> We count events per day on our server. No user or device is identified. No consent popup needed. <em>My recommendation</em></li>
-        <li><b>B. An analytics tool</b> such as PostHog. More detail per user. Needs a consent popup on first start.</li>
-      </ul></div>
-
-    <div class="card dec" data-cid="d-social" data-label="Decision: social media">
-      <h3>Which social media do we use?</h3><button class="pill" data-key="d-social" data-default="todo"></button>
-      <ul class="optl">
-        <li class="rec"><b>A. Short videos only.</b> Two clips a week, the same clip on TikTok, Instagram Reels and YouTube Shorts. About two hours a week. <em>My recommendation</em></li>
-        <li><b>B. Short videos plus X or Bluesky.</b> More reach among developers, more time.</li>
-        <li><b>C. None.</b> Only Reddit, Hacker News and press.</li>
-      </ul></div>
-
     <div class="card dec" data-cid="d-shots" data-label="Decision: store image style">
-      <h3>How should the store images look?</h3><button class="pill" data-key="d-shots" data-default="doing"></button>
-      <p class="ans" style="color:var(--gold)">Not final. Style C is the starting point (you, 22 Nov).</p>
-      <p class="ctx">The final call is made in the Claude design board, with the competitors' store pages beside it as references. Four styles are shown as pictures in the section "Assets to produce".</p>
+      <h3>How should the store images look?</h3><button class="pill" data-key="d-shots" data-default="waiting"></button>
+      <p class="ans" style="color:var(--warn)">Postponed to a Claude design session (you, 22 Nov).</p>
+      <p class="ctx">Style C is the starting point. The session also brings in the Fandex logo and the competitors' store pages as references.</p></div>
+
+    <div class="card dec" data-cid="d-onboard" data-label="Decision: onboarding">
+      <h3>Does the first start of the app need more than it has?</h3><button class="pill" data-key="d-onboard" data-default="todo"></button>
+      <p class="ctx">Today a new account is asked two things: which media types it follows, and to rate five well-known titles. Nothing explains what the score is, nothing offers to bring in a Trakt or Letterboxd history, and nothing mentions reminders.</p>
       <ul class="optl">
-        <li class="rec"><b>C.</b> A slogan on top, the screenshot below, on the app's dark background, no phone frame. <em>My recommendation</em></li>
-        <li><b>A, B or D.</b> Plain screenshot, phone frame, or photo background.</li>
-      </ul></div>
+        <li class="rec"><b>A. Add two steps.</b> One screen that says what Fandex does in three lines (the three messages), and one that offers to connect Trakt or import a list. <em>My recommendation</em></li>
+        <li><b>B. Keep it as it is.</b> Two steps, then straight into the app.</li>
+      </ul>
+      <p class="ctx">Either way, the existing two steps have never been run on a real phone with a new account. That check is your task.</p></div>
+  </div>
+
+  <h4>Decisions made</h4>
+  <div class="card" style="padding:6px 8px" data-label="Decisions made">
+    <table>
+      <tr><th>Question</th><th>Decision</th><th>Who, when</th></tr>
+      <tr data-cid="d-date"><td>Launch day</td><td>Tuesday 16 February 2027. Fallback if the Google Play account is late: Tuesday 9 March.</td><td>You, 22 Nov</td></tr>
+      <tr data-cid="d-lead"><td>What the marketing focuses on</td><td>Your three messages. See "Marketing messages".</td><td>You, 22 Nov</td></tr>
+      <tr data-cid="d-trader"><td>Trader or non-trader on Google Play</td><td>Trader. Your address and phone number will be shown on the store page from 1 March 2027.</td><td>You, 22 Nov</td></tr>
+      <tr data-cid="d-track"><td>How usage data is collected</td><td>Your own tool: counters on our server, shown on the telemetry page the admin area already has, which gets expanded. No outside service.</td><td>You, 22 Nov</td></tr>
+      <tr data-cid="d-social"><td>Social media</td><td>Short videos only: two clips a week, the same clip on TikTok, Instagram Reels and YouTube Shorts.</td><td>You, 22 Nov</td></tr>
+      <tr data-cid="d-testers"><td>A public beta with recruited testers</td><td>No. Friends have tested the app, and Google does not require testers for a business account.</td><td>You, 22 Nov</td></tr>
+    </table>
   </div>
 
   <h4>What blocks everything else</h4>
@@ -543,6 +529,67 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
 
   <h4>The five phases of the plan</h4>
   <div class="grid g5" id="phases"></div>
+</section>
+
+<!-- action plan -->
+<section id="actions" data-title="Action plan">
+  <h2>Action plan</h2>
+  <p class="sub" data-cid="ap-what">What I am working on now, what I do next, and what waits for you. Work that can run on its own goes to sub-agents. Each one gets the model that fits the job. I check every result before it counts as done.</p>
+
+  <h4>Which model does what</h4>
+  <div class="card" style="padding:6px 8px" data-cid="ap-models" data-label="Table: models">
+    <table>
+      <tr><th>Who</th><th>Used for</th><th>Why</th></tr>
+      <tr><td>Sub-agent on Sonnet</td><td>Collecting material and writing factual texts from existing documents.</td><td>Fast and cheap. The task has a clear right answer.</td></tr>
+      <tr><td>Sub-agent on Opus</td><td>Texts strangers will read, and documents where a wrong command does damage.</td><td>Better judgment on wording and on technical detail.</td></tr>
+      <tr><td>This session (Fable)</td><td>Anything that touches sign-in, the database, sync or legal text. Reviewing every sub-agent's result.</td><td>A project rule: those areas are never handed to a sub-agent, because a mistake there loses data.</td></tr>
+    </table>
+  </div>
+
+  <h4>Started on 22 Nov</h4>
+  <div class="card" style="padding:6px 8px" data-label="Table: work started">
+    <table>
+      <tr><th>Work</th><th>What comes out</th><th>Who</th><th>State</th></tr>
+      <tr data-cid="ap-1"><td>Competitor store pages as references</td><td>Screenshots of six competitors' Google Play pages, with notes on what each one does. For the Claude design session.</td><td>Sub-agent, Sonnet</td><td id="ap-1-state">Running</td></tr>
+      <tr data-cid="ap-2"><td>Store texts in English and German</td><td>Title, short text and long description, with the notices Trakt and TMDB require. A draft for you to edit: <span class="mono">drafts/store-listing.md</span>.</td><td>Sub-agent, Opus</td><td id="ap-2-state" class="yes">Draft ready</td></tr>
+      <tr data-cid="ap-3"><td>Facts sheet and directory texts</td><td>The one-page facts sheet for the press kit, and the entry texts for AlternativeTo and the free app directories: <span class="mono">drafts/facts-sheet.md</span>, <span class="mono">drafts/directory-texts.md</span>.</td><td>Sub-agent, Sonnet</td><td id="ap-3-state" class="yes">Draft ready</td></tr>
+      <tr data-cid="ap-4"><td>Launch-day runbook</td><td>What to watch on launch day, how to switch a broken part off, how to roll back, with the exact commands.</td><td>Sub-agent, Opus</td><td id="ap-4-state">Running</td></tr>
+      <tr data-cid="ap-5"><td>Four checks against the rules</td><td>Icon: correct size and format. Impressum: the VAT ID is missing. Trakt and TMDB notices: missing in the app. Account deletion: exists in Settings.</td><td>This session</td><td>Done</td></tr>
+    </table>
+  </div>
+
+  <h4>What the work has turned up so far</h4>
+  <div class="card" style="padding:6px 8px" data-label="Table: findings">
+    <table>
+      <tr><th>Finding</th><th>What it means</th><th>What I did</th></tr>
+      <tr data-cid="ap-f1"><td>A new user cannot connect Steam</td><td>Only accounts carried over from the old website have Steam. The app has no way to connect it. "Syncs with Trakt and Steam" was wrong for everyone who installs from Google Play.</td><td>Removed Steam from the wording on this page and from the drafts. Whether to build a Steam connection before launch is your call.</td></tr>
+      <tr data-cid="ap-f2"><td>Importing a list file on Android is unconfirmed</td><td>A note from 15 October says choosing a file "needs the next APK". Nothing says it was tried since.</td><td>Left "import your Letterboxd list" in the texts for now. It needs one test on your phone.</td></tr>
+      <tr data-cid="ap-f3"><td>The VAT ID is not in the Impressum</td><td>The law requires it since the number was issued.</td><td>Task opened. I draft the line, you approve it.</td></tr>
+      <tr data-cid="ap-f4"><td>The Trakt and TMDB notices are not in the app</td><td>Both providers require a "not endorsed or certified" line.</td><td>Task opened. The store text drafts already carry both.</td></tr>
+      <tr data-cid="ap-f5"><td>The app's own texts are English only</td><td>A German store page would suggest a German app.</td><td>The German store text says so in one line.</td></tr>
+    </table>
+  </div>
+
+  <h4>Next, by me, in this order</h4>
+  <div class="card" style="padding:6px 8px" data-label="Table: next work">
+    <table>
+      <tr><th>Work</th><th>Why it is mine</th><th>It waits for</th></tr>
+      <tr data-cid="ap-6"><td>Add the VAT ID to the Impressum, add the Trakt and TMDB notices</td><td>Legal text.</td><td>Your OK on the wording. I send it as a draft.</td></tr>
+      <tr data-cid="ap-7"><td>Privacy policy text for the usage counters, German and English</td><td>Legal text. It has to be published before any counter runs.</td><td>You agreeing the list of events in "Telemetry".</td></tr>
+      <tr data-cid="ap-8"><td>Usage counters on the server, and the expanded telemetry page</td><td>It changes the database and the sign-in path.</td><td>The privacy text above.</td></tr>
+      <tr data-cid="ap-11"><td>Security audit of the whole Fandex setup</td><td>Your request, 22 Nov: done with Claude Fable 5.2, the strongest model. It covers the server, the database, sign-in, the website, the app and the Cloudflare settings.</td><td>The telemetry and sign-in changes above, so the audit sees the code that actually launches. Planned for January.</td></tr>
+      <tr data-cid="ap-12"><td>Performance and hardening audit</td><td>Your request, 22 Nov. What breaks first under load, and what an attacker or a mistake could switch off.</td><td>Runs together with the security audit.</td></tr>
+      <tr data-cid="ap-9"><td>The signed app bundle for Google Play</td><td>It uses your signing key.</td><td>You creating the upload key.</td></tr>
+      <tr data-cid="ap-10"><td>Sign-in changes that need Google Play's certificate</td><td>Sign-in code.</td><td>The first upload to Google Play.</td></tr>
+    </table>
+  </div>
+
+  <h4>Waiting for your OK on how it should look</h4>
+  <p class="sub" style="margin-bottom:10px">Each of these adds or changes something on a screen. I do not change the app's screens without your go-ahead. Say "go" on any of them and I show a mockup first.</p>
+  <div data-cid="ap-ui" data-label="Work waiting for a design OK"><span class="chip">a "Send feedback" row in Settings</span><span class="chip">a "Share" button on a title</span><span class="chip">the "Get the app" link on fandex.org</span><span class="chip">the fandex.org/app page</span><span class="chip">asking for a Google Play rating</span><span class="chip">more onboarding steps</span><span class="chip">the "Why?" sheet naming the media type (parked)</span></div>
+
+  <h4>Waiting for you or for Google</h4>
+  <div data-cid="ap-nils" data-label="Work waiting for Nils or Google"><span class="chip">the D-U-N-S number</span><span class="chip">the account upgrade</span><span class="chip">the upload key</span><span class="chip">the trademark search</span><span class="chip">reserving the name on social media</span><span class="chip">the Reddit account</span><span class="chip">four screens captured on your phone</span><span class="chip">your notes for the launch post</span><span class="chip">the Claude design session</span></div>
 </section>
 
 <!-- ================================================================= MARKET -->
@@ -604,12 +651,24 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
   <div class="grid g3" style="margin-top:18px;align-items:stretch">
     <div class="card story" data-cid="st-1" data-label="Message 1">
       <div class="k"><span class="num">1</span>Message 1</div>
-      <h3>Rate your shows. Get your books.</h3>
+      <h3>Rate your shows. Find your next book.</h3>
       <dl class="facts">
         <dt>What it means</dt><dd data-cid="st-1-means">Fandex recommends titles in one kind of media based on what you rated in another. One score, one set of data.</dd>
         <dt>Why it is true</dt><dd data-cid="st-1-proof">Measured on your library: 99% of what scores a book you have not rated comes from your films, shows and games.</dd>
+        <dt>Wording, not decided</dt><dd>You said "Get your books" is vague. Three options:
+          <ul class="optl" style="margin-top:6px">
+            <li class="rec" data-cid="st-1-a"><b>A.</b> "Rate your shows. Find your next book." <em>My recommendation</em></li>
+            <li data-cid="st-1-b"><b>B.</b> "Your shows know your next book."</li>
+            <li data-cid="st-1-c"><b>C.</b> "Rate your shows. Find your next favorite book."</li>
+          </ul></dd>
+        <dt>Changes with the place it is shown</dt><dd data-cid="st-1-mix">The two media types are swapped to fit the audience:
+          <table class="mini-t">
+            <tr><td>Book communities</td><td>"Rate your shows. Find your next book."</td></tr>
+            <tr><td>Gaming communities</td><td>"Rate your movies. Find your next game."</td></tr>
+            <tr><td>Film communities</td><td>"Rate your games. Find your next movie."</td></tr>
+            <tr><td>Show communities</td><td>"Rate your books. Find your next show."</td></tr>
+          </table></dd>
         <dt>Problem</dt><dd data-cid="st-1-owed" class="warnt">The app does not show this anywhere yet. You parked the fix on 22 Nov.</dd>
-        <dt>Other wordings</dt><dd><span class="opt" data-cid="st-1-b">"Your taste doesn't stop at one medium."</span><span class="opt" data-cid="st-1-c">"Loved a show? Here is your next book."</span></dd>
       </dl>
     </div>
     <div class="card story" data-cid="st-2" data-label="Message 2">
@@ -624,24 +683,42 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
     </div>
     <div class="card story" data-cid="st-3" data-label="Message 3">
       <div class="k"><span class="num">3</span>Message 3</div>
-      <h3>A score that shows its working.</h3>
+      <h3>Your taste, in numbers.</h3>
       <dl class="facts">
-        <dt>What it means</dt><dd data-cid="st-3-means">Every score can be opened to see what raised or lowered it. Insights shows your taste by tag, person, studio and era.</dd>
-        <dt>Why it is true</dt><dd data-cid="st-3-proof">The "Why?" sheet exists on every title. Only your own ratings count, never other people's.</dd>
-        <dt>Other wordings</dt><dd><span class="opt" data-cid="st-3-b">"See why you'll like it."</span><span class="opt" data-cid="st-3-c">"Your taste, in numbers you can check."</span></dd>
+        <dt>What it means</dt><dd data-cid="st-3-means">Fandex shows you what you like and why: which genres, people and studios raise or lower your ratings. Every recommendation can be opened to see what it is based on.</dd>
+        <dt>Why it is true</dt><dd data-cid="st-3-proof">The Insights page and the "Why?" sheet exist today. Only your own ratings count, never other people's.</dd>
+        <dt>Wording, not decided</dt><dd>You said the old line assumed people know what "the score" is. Three options that do not mention it:
+          <ul class="optl" style="margin-top:6px">
+            <li class="rec" data-cid="st-3-a"><b>A.</b> "Your taste, in numbers." <em>My recommendation</em></li>
+            <li data-cid="st-3-b"><b>B.</b> "See why you like what you like."</li>
+            <li data-cid="st-3-c"><b>C.</b> "Discover your own taste."</li>
+          </ul></dd>
       </dl>
     </div>
   </div>
 
   <h4>The slogan</h4>
   <div class="card" data-cid="s-roof" data-label="The slogan">
-    <p class="ctx">One sentence above the three messages, for the store page, posts and the video. You chose A for now (22 Nov). The website keeps its current line, "Your index of every game, movie, show &amp; book."</p>
+    <p class="ctx">One sentence above the three messages, for the store page, posts and the video. You chose A for now. After the video you linked, I recommend E instead. The website keeps its current line, "Your index of every game, movie, show &amp; book."</p>
     <ul class="optl">
-      <li class="rec" data-cid="s-roof-a"><b>A.</b> "One taste. Everything you watch, play and read." <em>Chosen for now</em></li>
-      <li data-cid="s-roof-b"><b>B.</b> "One taste. Every screen and page."</li>
-      <li data-cid="s-roof-c"><b>C.</b> "One taste. Films, shows, games and books."</li>
-      <li data-cid="s-roof-d"><b>D.</b> "One taste. Every medium."</li>
+      <li class="rec" data-cid="s-roof-e"><b>E.</b> "Know what's next." <em>My recommendation</em></li>
+      <li data-cid="s-roof-a"><b>A.</b> "One taste. Everything you watch, play and read." <em>Your choice for now</em></li>
+      <li data-cid="s-roof-f"><b>F.</b> "Your shows know your next book."</li>
     </ul>
+    <p class="ctx" data-cid="s-roof-why">Why E: three words, and "next" means two things at once. What comes out next (message 2), and what you should watch, play or read next (message 1). "Know" covers message 3. It lists nothing, which was your objection to A.</p>
+  </div>
+
+  <h4>What the video you linked says about slogans, and what it means for Fandex</h4>
+  <div class="card" style="padding:6px 8px" data-cid="s-video" data-label="Table: lessons from the video">
+    <table>
+      <tr><th>Rule from the video</th><th>Its example</th><th>For Fandex</th></tr>
+      <tr data-cid="s-v1"><td>Say much with few words. Name the one thing that is different.</td><td>"Snap, crackle, pop" replaced a paragraph about cereal.</td><td>A list of media types or verbs is the paragraph. Drop it.</td></tr>
+      <tr data-cid="s-v2"><td>A double meaning saves space.</td><td>"Nothing runs like a Deere."</td><td>"Next" can mean the next release and your next favorite. That is option E.</td></tr>
+      <tr data-cid="s-v3"><td>Imply the benefit, do not state the feature.</td><td>Rolls-Royce: the loudest noise at 60 mph is the clock. It never says "quiet engine".</td><td>"Your shows know your next book" implies recommendations across media without saying so. That is option F.</td></tr>
+      <tr data-cid="s-v4"><td>Sell the feeling, not the product.</td><td>"A diamond is forever" sells commitment.</td><td>What Fandex sells is being sure what to pick next, and not missing it.</td></tr>
+      <tr data-cid="s-v5"><td>The best lines are often found, not written. They come from something a real person said.</td><td>"Got milk?" came out of a focus group.</td><td>Keep an ear on what the first users say about Fandex. A better line may come from them.</td></tr>
+    </table>
+    <p class="small" style="padding:8px 10px 4px">Source: "The Best-Written Ad Slogans Of All Time", The Art Of Storytelling, YouTube. I read its transcript.</p>
   </div>
 
   <div class="grid g2" style="margin-top:14px">
@@ -664,7 +741,7 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
       <h4>Words to use and words to avoid</h4>
       <div class="grid g2">
         <div class="card say" data-cid="s-say"><h3 style="font-size:17px">Use</h3><ul>
-          <li>"I built this."</li><li>"Free."</li><li>"From your own ratings."</li><li>"Syncs with Trakt and Steam."</li><li>"Export everything."</li></ul></div>
+          <li>"I built this."</li><li>"Free."</li><li>"From your own ratings."</li><li>"Syncs with Trakt."</li><li>"Export everything."</li></ul></div>
         <div class="card dont" data-cid="s-dont"><h3 style="font-size:17px">Avoid</h3><ul>
           <li>"No ads, ever." You plan ads later.</li><li>"AI-powered." TV Time closed "to focus on AI".</li><li>"Best", "#1". Google Play rejects them.</li><li>Any figure for running costs.</li><li>"Official" next to Trakt, Steam or TMDB.</li></ul></div>
       </div>
@@ -699,12 +776,13 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
       <div class="f"><b>Message</b>3.</div>
       <div class="f"><b>Where to reach them</b>r/letterboxd, Hacker News.</div></div>
     <div class="card aud" data-cid="s-a5" data-label="Target group 5">
-      <div class="who"><div class="rank">Group 5</div><h3>German speakers</h3></div>
-      <div class="f"><b>Who</b>Readers of German Android blogs.</div>
-      <div class="f"><b>How many</b>A small group, but easy to reach.</div>
-      <div class="f"><b>Message</b>2, in German: titles in German, release dates for Germany.</div>
-      <div class="f"><b>Where to reach them</b>mobiFlip, Caschys Blog, SmartDroid.</div></div>
+      <div class="who"><div class="rank">Group 5</div><h3>People outside the English-speaking countries</h3></div>
+      <div class="f"><b>Who</b>People who want titles in their own language and release dates for their own country.</div>
+      <div class="f"><b>How many</b>Not measured.</div>
+      <div class="f"><b>Message</b>2: "Titles in your language, release dates for your country."</div>
+      <div class="f"><b>Where to reach them</b>First through German Android blogs, because those are the ones we can write to: mobiFlip, Caschys Blog, SmartDroid.</div></div>
   </div>
+  <div class="note" data-cid="s-lang" data-label="What the app supports in other languages"><b>What the app supports today.</b> Titles are shown in 18 languages, picked by the country set in Settings, and release dates are the ones for that country. The app's own buttons and texts exist in English only. So the app is not specific to German, but it is not translated either.</div>
 </section>
 
 <!-- =============================================================== SCHEDULE -->
@@ -730,7 +808,7 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
   <p class="sub" data-cid="as-what">Everything we have to make before launch: the store images, the banner, the video, the store texts and the website pages. The store images come first, because their look is a design decision you have to make.</p>
 
   <h4>1. Which style should the store images have?</h4>
-  <p class="sub" style="margin-bottom:12px">Google Play shows up to eight upright images on the store page. Here is the same screen in four styles. These are rough. The fine-tuning and the final call happen in the Claude design board, next to screenshots of the competitors' store pages.</p>
+  <p class="sub" style="margin-bottom:12px">Google Play shows up to eight upright images on the store page. Here is the same screen in four styles. These are rough. The fine-tuning and the final call happen in a Claude design session, next to screenshots of the competitors' store pages.</p>
   <div class="grid g4" data-label="Store image styles">
     <div class="sty" data-cid="as-sty-a" data-label="Style A: screenshot only">
       <div class="mk a"><img src="img/calendar.jpg" alt="Style A: the calendar screenshot filling the whole image"></div>
@@ -754,35 +832,35 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
   <h4>2. The eight store images</h4>
   <p class="sub" style="margin-bottom:12px">Shown in style C. Each has one sentence. Four screens still have to be captured on the phone.</p>
   <div class="grid g4" data-label="The eight store images">
-    <div class="sty" data-cid="sb-1" data-label="Store image 1"><div class="mk c"><div class="hd">Rate your shows. Get your books.</div><div class="scr need">To capture: the Recommended row with books in it</div></div><p class="cap2">1 · message 1</p></div>
+    <div class="sty" data-cid="sb-1" data-label="Store image 1"><div class="mk c"><div class="hd">Rate your shows. Find your next book.</div><div class="scr need">To capture: the Recommended row with books in it</div></div><p class="cap2">1 · message 1</p></div>
     <div class="sty" data-cid="sb-2" data-label="Store image 2"><div class="mk c"><div class="hd">Everything you're waiting for, on one calendar.</div><div class="scr"><img src="img/calendar.jpg" alt="The calendar for one month"></div></div><p class="cap2">2 · message 2</p></div>
     <div class="sty" data-cid="sb-3" data-label="Store image 3"><div class="mk c"><div class="hd">A reminder on the day it comes out.</div><div class="scr need">To capture: a reminder on the lock screen</div></div><p class="cap2">3 · message 2</p></div>
-    <div class="sty" data-cid="sb-4" data-label="Store image 4"><div class="mk c"><div class="hd">A score made from your own ratings.</div><div class="scr"><img src="img/title.jpg" alt="A title page with the score"></div></div><p class="cap2">4 · message 3</p></div>
-    <div class="sty" data-cid="sb-5" data-label="Store image 5"><div class="mk c"><div class="hd">See what moved the score.</div><div class="scr need">To capture: the "Why?" sheet</div></div><p class="cap2">5 · message 3</p></div>
-    <div class="sty" data-cid="sb-6" data-label="Store image 6"><div class="mk c"><div class="hd">Your taste in numbers.</div><div class="scr need">To capture: Insights</div></div><p class="cap2">6 · message 3</p></div>
+    <div class="sty" data-cid="sb-4" data-label="Store image 4"><div class="mk c"><div class="hd">Know if you'll like it before you start.</div><div class="scr"><img src="img/title.jpg" alt="A title page with the score"></div></div><p class="cap2">4 · message 3</p></div>
+    <div class="sty" data-cid="sb-5" data-label="Store image 5"><div class="mk c"><div class="hd">And see why.</div><div class="scr need">To capture: the "Why?" sheet</div></div><p class="cap2">5 · message 3</p></div>
+    <div class="sty" data-cid="sb-6" data-label="Store image 6"><div class="mk c"><div class="hd">Your taste, in numbers.</div><div class="scr need">To capture: Insights</div></div><p class="cap2">6 · message 3</p></div>
     <div class="sty" data-cid="sb-7" data-label="Store image 7"><div class="mk c"><div class="hd">Films, shows, games and books in one app.</div><div class="scr"><img src="img/home.jpg" alt="The home screen"></div></div><p class="cap2">7 · what it is</p></div>
-    <div class="sty" data-cid="sb-8" data-label="Store image 8"><div class="mk c"><div class="hd">Bring your Trakt, Steam and Letterboxd history.</div><div class="scr need">To capture: the import screen</div></div><p class="cap2">8 · switching</p></div>
+    <div class="sty" data-cid="sb-8" data-label="Store image 8"><div class="mk c"><div class="hd">Bring your Trakt and Letterboxd history.</div><div class="scr need">To capture: the import screen</div></div><p class="cap2">8 · switching</p></div>
   </div>
   <p class="small" style="margin-top:10px" data-cid="sb-note">The screens shown here are from the live website with real covers. The final images depend on your decision about covers (see "Decisions").</p>
 
-  <div class="grid g2" style="margin-top:14px">
+  <h4>3. The banner at the top of the store page</h4>
+  <p class="sub" style="margin-bottom:12px">Google calls it the feature graphic: 1024 x 500 pixels. You liked this layout. One version per message, as you asked. The real Fandex logo replaces the plain name in the design session.</p>
+  <div class="grid g3" data-label="Banner versions">
+    <div data-cid="as-fg" data-label="Banner: message 2"><div class="fg"><div class="fgt"><b>Fandex</b><span>Everything you're waiting for, on one calendar.</span></div><div class="fgi"><img src="img/calendar.jpg" alt="Banner with the calendar sentence and a tilted calendar screenshot"></div></div><p class="cap2">Message 2 · wording chosen</p></div>
+    <div data-cid="as-fg-1" data-label="Banner: message 1"><div class="fg"><div class="fgt"><b>Fandex</b><span>Rate your shows. Find your next book.</span></div><div class="fgi"><img src="img/home.jpg" alt="Banner with the recommendation sentence and a tilted home screenshot"></div></div><p class="cap2">Message 1 · wording open</p></div>
+    <div data-cid="as-fg-3" data-label="Banner: message 3"><div class="fg"><div class="fgt"><b>Fandex</b><span>Your taste, in numbers.</span></div><div class="fgi"><img src="img/title.jpg" alt="Banner with the taste sentence and a tilted title page screenshot"></div></div><p class="cap2">Message 3 · wording open</p></div>
+  </div>
+  <p class="small" style="margin-top:8px" data-cid="as-fg-note">Google Play shows one banner at a time. The other versions can be tested against it in Play Console (a "store listing experiment"), and all of them work as images for posts.</p>
+
+  <h4>4. The store texts</h4>
+  <div class="card listing" data-cid="as-listing" data-label="Store texts" style="max-width:640px">
+    <div class="li-ic">F</div>
     <div>
-      <h4>3. The banner at the top of the store page</h4>
-      <div class="fg" data-cid="as-fg" data-label="Banner mock"><div class="fgt"><b>Fandex</b><span>Everything you're waiting for, on one calendar.</span></div><div class="fgi"><img src="img/calendar.jpg" alt="The calendar screenshot, tilted, on the right side of the banner"></div></div>
-      <p class="small" style="margin-top:8px">Google calls it the feature graphic. 1024 x 500 pixels. Proposal: the name, the calendar sentence you chose, and a piece of the calendar.</p>
-    </div>
-    <div>
-      <h4>4. The store texts</h4>
-      <div class="card listing" data-cid="as-listing" data-label="Store texts">
-        <div class="li-ic">F</div>
-        <div>
-          <b data-max="30">Fandex: Movies, Shows &amp; Games</b>
-          <p data-max="80">Rate shows, get books. One calendar, one score for films, shows, games, books.</p>
-        </div>
-      </div>
-      <p class="small" style="margin-top:8px">Drafts. The title may have 30 characters, the line under it 80. A long description (up to 4,000 characters) in English and German follows once the messages are final.</p>
+      <b data-max="30">Fandex: Movies, Shows &amp; Games</b>
+      <p data-max="80">Rate shows, find your next book. One calendar for every release you wait for.</p>
     </div>
   </div>
+  <p class="small" style="margin-top:8px">Drafts. The title may have 30 characters, the line under it 80. The long description (up to 4,000 characters) in English and German is being drafted now, see "Action plan".</p>
 
   <h4>5. The store video, 30 seconds</h4>
   <div class="grid g5" data-label="Video storyboard">
@@ -982,7 +1060,7 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
   </div>
 
   <h4>Left for later, on purpose</h4>
-  <div data-cid="f-later" data-label="Later"><span class="chip">an iPhone app</span><span class="chip">a public beta</span><span class="chip">an email waiting list</span><span class="chip">paid ads</span><span class="chip">board games</span><span class="chip">public user profiles</span></div>
+  <div data-cid="f-later" data-label="Later"><span class="chip">an iPhone app</span><span class="chip">a public beta</span><span class="chip">an email waiting list</span><span class="chip">paid ads</span><span class="chip">board games</span><span class="chip">public user profiles</span><span class="chip">the app's own texts in other languages</span></div>
 </section>
 
 <!-- ================================================================ SOURCES -->

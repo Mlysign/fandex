@@ -80,3 +80,7 @@ docs/release-plan/comments.js
 
 # /design working files: keep the .dc.html sources + canvas.json, never the ~2MB seeded canvas
 .design/fandex-*.html
+
+# Screenshots of competitors' store pages, kept for the design session. Their
+# images, not ours to publish.
+docs/release-plan/refs/
