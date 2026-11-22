@@ -297,6 +297,15 @@ Each of these is a way the Worker differs from the site, and each has a test.
   rating, a tick, a hide, a follow) spends `DAILY_SMALL_SAVES_CAP` (15,000 units a day for
   everybody) and `DAILY_SMALL_SAVES_PER_USER` (1,000), never the import budget, so a day of big
   imports cannot stop ratings. `/v1/health` reports both as `userWrites` and `smallSaves`.
+- **A cap on READS is counted in the isolate** (`spendSoft` in `budget.ts`, since 2026-11-22): the
+  delta pages, the lookup refs and the release-dates films. The count is written at most every
+  30 seconds, one row for all the calls in between, so the cap can run over by what the isolates
+  took in since their last write. Anything that writes rows or calls a provider stays on `spend`.
+  A lookup and a release-dates call each cost at least 20 units.
+- **Two switches for a day the budgets cannot carry** (read at call time, set with
+  `wrangler secret put`, no deploy): `SIGNUPS_OFF=1` refuses NEW accounts with 503
+  `signups-closed` while everybody who has one signs in and connects as before, and
+  `DAILY_FETCH_CAP` is no longer in `vars`, so it is set like every other cap.
 - **A provider id that answered as another is kept in `provider_aliases`** (migration 0004): an
   Open Library work merged into another, a Hardcover duplicate, an IGDB port opened as its main
   game. Resolve writes it, and resolve and lookup read it, so a library sync stops fetching it.
