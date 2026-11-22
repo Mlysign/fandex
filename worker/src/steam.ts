@@ -28,7 +28,7 @@ const STEAM_API = "https://api.steampowered.com";
 /** A SteamID64. Steam's own ids are 17 digits. */
 const STEAM_ID = /^\d{17}$/;
 /** Two Steam calls a sync. A day's syncs for every account fit many times over in Steam's 100,000. */
-const DEFAULT_DAILY_STEAM_CAP = 2000;
+export const DEFAULT_DAILY_STEAM_CAP = 2000;
 const STEAM_BUDGET_MS = 15_000;
 
 export interface SteamLibraryEntry { appid: number; playtime: number; lastPlayed: number | null }

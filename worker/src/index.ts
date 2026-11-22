@@ -47,8 +47,8 @@ import {
 } from "./adminScoring";
 import { clearedSessionCookie, createSession, readSession, bumpSessionEpoch, sessionCookie, type Session } from "./auth/session";
 import { completeMerge, signIn, type SignInOutcome } from "./auth/signin";
-import { IdentityRejected, verifyDiscordToken, verifyGoogleIdToken, verifyTraktToken, type VerifiedIdentity } from "./auth/verify";
-import { capFrom, spend, spent } from "./budget";
+import { IdentityRejected, steamProfileName, verifyDiscordToken, verifyGoogleIdToken, verifySteamOpenId, verifyTraktToken, type VerifiedIdentity } from "./auth/verify";
+import { capFrom, kvGet, kvSet, spend, spent } from "./budget";
 import { calendarMonth, validMonth } from "./calendar";
 import {
   catalogDeltaJson, catalogPlatformsJson, itemDetailJson, parseCursor, parseItemIds, regionalReleaseDatesJson, RELEASE_DATES_MAX, seasonPremieresJson,
@@ -58,7 +58,7 @@ import { LOOKUP_FACETS_MAX, LOOKUP_MAX, lookupRefsJson, parseRefs, resolveItem, 
 import { runFastScheduled, runScheduled } from "./cron";
 import { baselineJson, FAST_CRON } from "./baseline";
 import { shelves } from "./shelves";
-import { steamLibrary } from "./steam";
+import { DEFAULT_DAILY_STEAM_CAP, steamLibrary } from "./steam";
 import { coverRoute } from "./covers";
 import { nowSeconds } from "./d1";
 import { DEV_ACCOUNTS, devConnect, devLogin, devLoginAllowed } from "./devLogin";
@@ -268,6 +268,7 @@ async function route(c: Ctx): Promise<Response> {
 
   if (a === "auth" && method === "POST") {
     if (b === "google" || b === "trakt" || b === "discord") return authenticate(c, b);
+    if (b === "steam") return connectSteam(c);
     if (b === "merge") return merge(c);
     if (b === "logout") return logout(c);
   }
@@ -345,7 +346,7 @@ const PUBLIC_ROUTES: [RegExp, string][] = [
   [/^features$/, "GET"],
   [/^cover\/hardcover\/.+$/, "GET, HEAD"],
   [/^calendar\/[^/]+$/, "GET"],
-  [/^auth\/(google|trakt|discord|merge|logout)$/, "POST"],
+  [/^auth\/(google|trakt|discord|steam|merge|logout)$/, "POST"],
   [/^t\/(pv|usage)$/, "POST"],
 ];
 
@@ -572,6 +573,53 @@ async function authenticate(c: Ctx, provider: "google" | "trakt" | "discord"): P
   if (session && !csrfOk(c.env, c.request, session)) return error(403, "forbidden");
   const out = await signIn(c.env, identity, session?.user ?? null);
   countSignIn(c, provider, out.kind);
+  return signInResponse(c, out);
+}
+
+/**
+ * Connect a Steam account to the one that is signed in. Steam is a connection,
+ * never a way in: with no session this is a 401 before Steam is asked anything,
+ * so an account whose only identity is Steam cannot be created here. Which
+ * account gets the identity is decided by the session, as for every provider,
+ * and an identity another account owns goes through the same merge rules.
+ *
+ * The client sends back the `openid.*` values Steam put on our return page
+ * (auth/verify.ts says what is checked). The page that received them compares
+ * the `state` it started with before sending them, which is what ties an
+ * answer to the browser that asked for it; the Worker holds no state for it.
+ */
+async function connectSteam(c: Ctx): Promise<Response> {
+  if (!(await allow(c.env.RL_AUTH, `auth:${clientIp(c.request)}`))) return error(429, "rate-limited");
+  const session = await readSession(c.env, c.request, c.defer);
+  if (!session) return error(401, "unauthorized", "Sign in first, then connect Steam in Settings.");
+  if (!csrfOk(c.env, c.request, session)) return error(403, "forbidden");
+  const body = (await readJson(c.request, AUTH_BODY_MAX)) as { params?: unknown } | null;
+  const params = body?.params;
+  if (!params || typeof params !== "object" || Array.isArray(params)) return error(400, "bad-request", "Missing Steam answer");
+
+  let identity: VerifiedIdentity;
+  try {
+    identity = await verifySteamOpenId(c.env, params as Record<string, unknown>, {
+      // Written only for an answer Steam has confirmed, so a stranger cannot
+      // make this spend row writes. Ten minutes outlives the five an answer is good for.
+      usedBefore: async (nonce) => {
+        const key = `steam-answer:${nonce.slice(0, 120)}`;
+        if (await kvGet(c.env.DB, key)) return true;
+        await kvSet(c.env.DB, key, "1", 600);
+        return false;
+      },
+    });
+  } catch (e) {
+    if (e instanceof IdentityRejected) return error(401, "identity-rejected", e.message);
+    console.warn("identity_check_failed", { provider: "steam", error: e instanceof Error ? e.message : String(e) });
+    return error(502, "provider-unavailable");
+  }
+  // The profile name is display only and costs one call of the Steam budget.
+  if (await spend(c.env.DB, "steam", capFrom(c.env.DAILY_STEAM_CAP, DEFAULT_DAILY_STEAM_CAP), 1)) {
+    identity = { ...identity, displayName: await steamProfileName(c.env, identity.providerUserId) };
+  }
+  const out = await signIn(c.env, identity, session.user);
+  countSignIn(c, "steam", out.kind);
   return signInResponse(c, out);
 }
 

@@ -21,7 +21,7 @@ import type { Env } from "../env";
 
 /** What a provider vouched for. `providerUserId` is the identity; the rest is display. */
 export interface VerifiedIdentity {
-  provider: "google" | "trakt" | "discord";
+  provider: "google" | "trakt" | "discord" | "steam";
   providerUserId: string;
   displayName: string | null;
   avatarUrl: string | null;
@@ -241,4 +241,134 @@ export async function verifyDiscordToken(
     ? `https://cdn.discordapp.com/avatars/${id}/${user.avatar}.png?size=128`
     : null;
   return { provider: "discord", providerUserId: id, displayName: name, avatarUrl: avatar };
+}
+
+// ── Steam ────────────────────────────────────────────────────────────────────
+
+const STEAM_OPENID_ENDPOINT = "https://steamcommunity.com/openid/login";
+const OPENID_NS = "http://specs.openid.net/auth/2.0";
+const STEAM_CLAIMED_ID = /^https:\/\/steamcommunity\.com\/openid\/id\/(\d{17})$/;
+/** The page Steam sends the browser back to. Only this path, on an origin we serve. */
+export const STEAM_RETURN_PATH = "/auth/steam";
+/** Every one of these must be covered by Steam's signature, or it proves nothing. */
+const STEAM_MUST_SIGN = ["op_endpoint", "claimed_id", "identity", "return_to", "response_nonce", "assoc_handle"];
+/** How old an answer from Steam may be. The page forwards it within seconds. */
+export const STEAM_ANSWER_MAX_AGE = 300;
+
+export interface SteamVerifyDeps {
+  fetchImpl?: typeof fetch;
+  /** Unix seconds, for the tests. */
+  now?: number;
+  /** True if this answer was used before; called once the answer is known to be real. */
+  usedBefore?: (nonce: string) => Promise<boolean>;
+}
+
+/**
+ * Steam signs people in with OpenID 2.0 and nothing newer. The browser comes
+ * back to our page with a set of `openid.*` values, the page sends them here
+ * unchanged, and this asks Steam whether it issued exactly those values
+ * (`check_authentication`). Steam answers yes ONCE per answer it issued.
+ *
+ * What is checked before Steam is asked, and why:
+ *   - the answer names Steam's own endpoint and an id of Steam's shape, twice
+ *     (`claimed_id` and `identity` must be the same). The Railway site matched
+ *     the digits at the end of any address and compared nothing.
+ *   - `return_to` is our own page. An answer Steam issued for another site
+ *     that uses Steam sign-in must not sign anybody in here, which is the
+ *     same reason Google's audience and Discord's application are checked.
+ *   - the fields that matter are in the signed list. A field outside it is
+ *     one the sender could have changed after Steam signed.
+ *   - the answer is fresh, by the time Steam stamped into its nonce.
+ *
+ * The identity is the SteamID64. Nothing from Steam is stored but that id and
+ * the public profile name; no key or token exists in this flow at all.
+ */
+export async function verifySteamOpenId(
+  env: Env,
+  raw: Record<string, unknown>,
+  deps: SteamVerifyDeps = {},
+): Promise<VerifiedIdentity> {
+  const params: Record<string, string> = {};
+  const keys = Object.keys(raw);
+  if (keys.length > 24) throw new IdentityRejected("Steam answer is malformed");
+  for (const key of keys) {
+    const value = raw[key];
+    if (!key.startsWith("openid.")) continue;
+    if (typeof value !== "string" || value.length > 2048) throw new IdentityRejected("Steam answer is malformed");
+    params[key] = value;
+  }
+  const get = (name: string) => params[`openid.${name}`] ?? "";
+
+  if (get("mode") !== "id_res") throw new IdentityRejected("Steam sign-in was cancelled");
+  if (get("ns") !== OPENID_NS) throw new IdentityRejected("Steam answer is malformed");
+  if (get("op_endpoint") !== STEAM_OPENID_ENDPOINT) throw new IdentityRejected("Steam answer names another sign-in service");
+  const claimed = STEAM_CLAIMED_ID.exec(get("claimed_id"));
+  if (!claimed || get("identity") !== get("claimed_id")) throw new IdentityRejected("Steam returned no user");
+  const signed = get("signed").split(",");
+  if (!STEAM_MUST_SIGN.every((field) => signed.includes(field)) || !get("sig")) {
+    throw new IdentityRejected("Steam answer is not fully signed");
+  }
+
+  // Our page, on an origin we serve. ALLOWED_ORIGINS is the same list CORS and
+  // the session cookie trust.
+  let returnTo: URL;
+  try { returnTo = new URL(get("return_to")); } catch { throw new IdentityRejected("Steam answer is malformed"); }
+  const origins = (env.ALLOWED_ORIGINS ?? "").split(",").map((o) => o.trim()).filter(Boolean);
+  if (!origins.includes(returnTo.origin) || returnTo.pathname !== STEAM_RETURN_PATH) {
+    throw new IdentityRejected("Steam answer was issued for another site");
+  }
+
+  // The nonce starts with the moment Steam issued it: 2026-11-22T17:00:00Z…
+  const now = deps.now ?? Math.floor(Date.now() / 1000);
+  const nonce = get("response_nonce");
+  const stamped = Date.parse(nonce.slice(0, 20)) / 1000;
+  if (!Number.isFinite(stamped) || Math.abs(now - stamped) > STEAM_ANSWER_MAX_AGE) {
+    throw new IdentityRejected("Steam answer is too old");
+  }
+
+  const body = new URLSearchParams(params);
+  body.set("openid.mode", "check_authentication");
+  let res: Response;
+  try {
+    res = await (deps.fetchImpl ?? fetch)(STEAM_OPENID_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "Fandex/1.0 (+https://fandex.org)" },
+      body: body.toString(),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (e) {
+    throw new Error(`Steam is unreachable: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (!res.ok) throw new Error(`Steam answered ${res.status}`);
+  // Key-value lines. `is_valid:true` as a whole line, never a substring match:
+  // the Railway site accepted any body that contained the text.
+  const lines = (await res.text()).split("\n").map((l) => l.trim());
+  if (!lines.includes("is_valid:true")) throw new IdentityRejected("Steam did not confirm the sign-in");
+
+  // Steam confirms an answer once. This is the second lock on the same door,
+  // for the day Steam's behaviour changes.
+  if (deps.usedBefore && (await deps.usedBefore(nonce))) throw new IdentityRejected("Steam answer was already used");
+
+  return { provider: "steam", providerUserId: claimed[1]!, displayName: null, avatarUrl: null };
+}
+
+/**
+ * The public profile name behind a SteamID64, or null. Display only: a failure
+ * here never fails a sign-in. Uses the Web API key the library sync uses.
+ */
+export async function steamProfileName(env: Env, steamId: string, fetchImpl: typeof fetch = fetch): Promise<string | null> {
+  if (!env.STEAM_API_KEY || !/^\d{17}$/.test(steamId)) return null;
+  try {
+    const res = await fetchImpl(
+      `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${encodeURIComponent(env.STEAM_API_KEY)}&steamids=${steamId}`,
+      { signal: AbortSignal.timeout(8_000) },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as { response?: { players?: { steamid?: unknown; personaname?: unknown }[] } };
+    const player = data.response?.players?.find((p) => p.steamid === steamId);
+    const name = typeof player?.personaname === "string" ? player.personaname.trim().slice(0, 64) : "";
+    return name || null;
+  } catch {
+    return null;
+  }
 }
