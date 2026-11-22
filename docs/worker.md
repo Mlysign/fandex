@@ -153,6 +153,9 @@ one batch adds at most 200 to a count. It answers 200 whatever it decided, and i
 plus three figures worked out from rows the accounts already hold: the media-type mix, each
 signup week's share with five ratings in seven days, and first entries in a new media type.
 
+**`GET /v1/admin/users` and `GET /v1/admin/usage` answer from a copy kept for an hour** (`keptAdminAnswer`
+in `index.ts`, `kv` keys `admin:*`, since 2026-11-22), and deleting an account removes the copies.
+
 ⚠️ `GET /v1/admin/users` groups every row of `user_item_state` several times over. **Measured on live D1 on 2026-10-11:
 30,597 rows read per view** with one account of 2,484 state rows, so about twelve rows read per state row, and it grows
 with every account. 160 views would spend the day. Fine for one admin and one account; before there are more accounts it
