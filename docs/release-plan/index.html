@@ -283,7 +283,7 @@ body.cp-closed #cpanel{display:none}
 .story .k{display:flex;align-items:center;gap:8px;font:400 10px var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--gold)}
 .story h3{font-size:24px;margin:0}
 .story .pf{border-top:1px solid var(--line);padding-top:8px;font-size:12.5px;color:var(--tx2)}
-.story .pf b{color:var(--tx)}.story .pf.owed b{color:var(--warn)}
+.story .pf b{color:var(--tx)}.story .pf.owed b{color:var(--warn)}.story .pf.chosen b{color:var(--ok)}
 .story .opts{margin-top:auto}
 .viz{display:flex;flex-direction:column;gap:2px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .vcol{display:flex;flex-wrap:wrap;align-items:center;gap:0 2px}
@@ -390,7 +390,7 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
   <p class="sub" style="margin-top:12px;font-size:17px" data-cid="g-sub">The app goes live on Google Play and fandex.org gets its first outside links in the same week. Three stories carry it.</p>
 
   <div class="grid g3" style="margin-top:18px" data-label="The three stories">
-    <a class="card mini" href="#strategy" data-cid="g-s1" data-label="Story 1"><span class="num">1</span><span><b>Rate your shows. Get your books.</b><small>One taste, across every medium.</small></span></a>
+    <a class="card mini" href="#strategy" data-cid="g-s1" data-label="Story 1"><span class="num">1</span><span><b>Rate your shows. Get your books.</b><small>One taste, across films, shows, games and books.</small></span></a>
     <a class="card mini" href="#strategy" data-cid="g-s2" data-label="Story 2"><span class="num">2</span><span><b>Everything you're waiting for, on one calendar.</b><small>A nudge the morning it is out.</small></span></a>
     <a class="card mini" href="#strategy" data-cid="g-s3" data-label="Story 3"><span class="num">3</span><span><b>A score that shows its working.</b><small>See why you will like it.</small></span></a>
   </div>
@@ -434,7 +434,7 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
       <p>Accepted on 22 Nov.</p><p class="alt">If the account slips: Tue 9 March.</p></div>
     <div class="card dec" data-cid="d-lead" data-label="Decision: lead message"><h3>Lead with the three stories</h3><button class="pill" data-key="d-lead" data-default="todo"></button>
       <p>Your direction, 22 Nov. Cross-media is the thread through all of them.</p><p class="alt">The wording is in the pitch section.</p></div>
-    <div class="card dec" data-cid="d-line" data-label="Decision: the one line"><h3>The line: "One taste. Every medium."</h3><button class="pill" data-key="d-line" data-default="todo"></button>
+    <div class="card dec" data-cid="d-line" data-label="Decision: the one line"><h3>The line: "One taste. Everything you watch, play and read."</h3><button class="pill" data-key="d-line" data-default="todo"></button>
       <p>For posts and the store. The site keeps "Your index of every game, movie, show &amp; book."</p><p class="alt">Two other options sit beside it in the pitch section.</p></div>
     <div class="card dec" data-cid="d-art" data-label="Decision: cover art in store graphics"><h3>Store graphics show only covers we may use</h3><button class="pill" data-key="d-art" data-default="todo"></button>
       <p>Play's copyright rule names cover art. Posts and clips show the app as it is.</p><p class="alt">My reading, not legal advice.</p></div>
@@ -518,12 +518,12 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
 <!-- =============================================================== STRATEGY -->
 <section id="strategy" data-title="The pitch">
   <div class="eyebrow">The pitch</div>
-  <h2>One taste. Every medium.</h2>
+  <h2>One taste. Everything you watch, play and read.</h2>
   <p class="sub" data-cid="s-pos">Three stories, and the same idea under each: what you like in one medium tells Fandex what you will like in the others.</p>
 
   <div class="roof" style="margin-top:18px;border-radius:14px" data-cid="s-roof" data-label="The one line">
-    <div class="eyebrow">The one line</div><div class="big">One taste. Every medium.</div>
-    <div class="opts" style="justify-content:center;margin-top:12px"><span class="opt-l">or</span><span class="opt" data-cid="s-roof-b">"Everything you watch, play and read. And what's next."</span><span class="opt" data-cid="s-roof-c">"Your shows know which books you'll love."</span></div>
+    <div class="eyebrow">The one line</div><div class="big">One taste. Everything you watch, play and read.</div>
+    <div class="opts" style="justify-content:center;margin-top:12px"><span class="opt-l">or</span><span class="opt" data-cid="s-roof-b">"One taste. Every screen and page."</span><span class="opt" data-cid="s-roof-c">"One taste. Films, shows, games and books."</span><span class="opt" data-cid="s-roof-d">"One taste. Every medium."</span></div>
   </div>
 
   <div class="grid g3" style="margin-top:14px;align-items:stretch">
@@ -561,6 +561,7 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
       </div>
       <div class="notif" data-cid="st-2-notif" data-label="Story 2: the reminder"><span class="ic">F</span><span><small>Fandex · 09:00</small><b>Out today: the game on your wishlist</b><em>Tap to open it.</em></span></div>
       <div class="opts"><span class="opt-l">or</span><span class="opt" data-cid="st-2-b">"A nudge the morning it's out."</span><span class="opt" data-cid="st-2-c">"Book, show, game or film: never miss release day."</span></div>
+      <div class="pf chosen" data-cid="st-2-chosen"><b>Chosen, 22 Nov.</b> This line goes on store screenshot 2 and the feature graphic.</div>
       <div class="pf" data-cid="st-2-proof"><b>Proof.</b> Three reminders at 09:00: a wishlisted release, a new season, the next episode.</div>
       <div class="pf owed" data-cid="st-2-owed"><b>Still owed.</b> You have not yet seen one arrive on your phone.</div>
     </div>
@@ -632,7 +633,7 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
       <div class="f"><b>Story</b>1, then 2.</div>
       <div class="f"><b>Find them</b>AlternativeTo, r/trakt.</div></div>
     <div class="card aud" data-cid="s-a2" data-label="Audience 2: multi-medium fans">
-      <div class="who"><div class="rank">2 · The core</div><h3>Four-app jugglers</h3><div class="q">"One taste. Every medium."</div></div>
+      <div class="who"><div class="rank">2 · The core</div><h3>Four-app jugglers</h3><div class="q">"One taste. Everything you watch, play and read."</div></div>
       <div class="f"><b>Who</b>Letterboxd plus a show app plus Goodreads.</div>
       <div class="f"><b>How many</b>40% of fans want one place.</div>
       <div class="f"><b>Story</b>1.</div>
