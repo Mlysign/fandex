@@ -171,11 +171,12 @@ tr.us td{background:var(--gold-s);color:var(--tx)}
 
 /* audiences */
 .aud .rank{font:400 10px var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--gold)}
-.aud h3{font-size:19px;margin:6px 0 6px}
-.aud dl{margin:0;font-size:13px;display:grid;grid-template-columns:54px 1fr;gap:5px 8px}
-.aud dt{font:400 10px/1.9 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
-.aud dd{margin:0;color:var(--tx2);line-height:1.4}
-.aud dd.q{color:var(--tx);font-family:var(--serif);font-size:16px;line-height:1.25}
+.auds{display:grid;gap:10px}
+.aud{display:grid;grid-template-columns:minmax(230px,1.25fr) repeat(4,1fr);gap:10px 26px;align-items:start}
+.aud h3{font-size:21px;margin:6px 0 6px}
+.aud .q{color:var(--gold);font-family:var(--serif);font-size:17px;line-height:1.25}
+.aud .f{font-size:14px;color:var(--tx2);line-height:1.45}
+.aud .f b{display:block;font:400 10px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin-bottom:5px}
 
 /* positioning map */
 .map{position:relative;height:330px;background:var(--el);border:1px solid var(--line);border-radius:14px;margin:6px 0 4px 26px}
@@ -270,6 +271,7 @@ body.cp-closed #cpanel{display:none}
   h1{font-size:32px}h2{font-size:26px}
   .g3,.g4,.g5,.g6,.shots{grid-template-columns:1fr 1fr}
   .g2,.hooks{grid-template-columns:1fr}
+  .aud{grid-template-columns:1fr 1fr}.aud .who{grid-column:1/-1}
   .check,.src{columns:1}
   .row{grid-template-columns:86px 1fr}
   .row .due{text-align:left}
@@ -323,7 +325,7 @@ body.cp-closed #cpanel{display:none}
       </div>
       <h4>Money</h4>
       <div class="card" data-cid="g-money">
-        <p class="sub"><b style="color:var(--tx)">Needed: 0 euros.</b> Worth paying: Workers Paid at about 5 euros a month from the beta on, and 290 euros for the word mark if the name search comes back clean. Not worth paying: directory "featured" slots, ads, press services.</p>
+        <p class="sub"><b style="color:var(--tx)">Needed: 0 euros.</b> Worth paying: Workers Paid at about 5 euros a month from January on, and 290 euros for the word mark if the name search comes back clean. Not worth paying: directory "featured" slots, ads, press services.</p>
       </div>
     </div>
   </div>
@@ -331,7 +333,7 @@ body.cp-closed #cpanel{display:none}
   <h4>Decisions I need from you <span class="cnt">comment on any of them, or set it to Done to accept</span></h4>
   <div class="grid g2">
     <div class="card dec" data-cid="d-date" data-label="Decision: launch day"><h3>Launch day: Tue 16 Feb 2027</h3><button class="pill" data-key="d-date" data-default="todo"></button>
-      <p>Twelve weeks is what the account, the assets and a three-week beta need. The week has Persona 4 Revival, the next one has Fable and Steam Next Fest, and the Oscars follow four weeks later.</p><p class="alt">Fallback if the account slips: Tue 9 March, five days before the Oscars.</p></div>
+      <p>Twelve weeks is what the account and the assets need, plus a check of the Play build and about two weeks of slack. The week has Persona 4 Revival, the next one has Fable and Steam Next Fest, and the Oscars follow four weeks later.</p><p class="alt">Fallback if the account slips: Tue 9 March, five days before the Oscars.</p></div>
     <div class="card dec" data-cid="d-lead" data-label="Decision: lead message"><h3>Lead with the calendar and the score</h3><button class="pill" data-key="d-lead" data-default="todo"></button>
       <p>"One app for everything" is true, and six new apps say the same. A calendar of your releases and a score made from your ratings are what the others don't have together.</p><p class="alt">Other option: lead with "one app instead of four".</p></div>
     <div class="card dec" data-cid="d-art" data-label="Decision: cover art in store graphics"><h3>Store graphics show only covers we may use</h3><button class="pill" data-key="d-art" data-default="todo"></button>
@@ -433,37 +435,37 @@ body.cp-closed #cpanel{display:none}
   </div>
 
   <h4>Who it is for, in order</h4>
-  <div class="grid g5">
-    <div class="card aud" data-cid="s-a1" data-label="Audience 1: stranded show trackers"><div class="rank">1 · Start here</div><h3>Stranded show trackers</h3><dl>
-      <dt>Who</dt><dd>Ex TV Time users and Trakt users who hit the free cap.</dd>
-      <dt>Size</dt><dd>25M lost their app in July 2026.</dd>
-      <dt>Hook</dt><dd class="q">"Your shows, with no cap on your list."</dd>
-      <dt>Show</dt><dd>Up next, the home-screen widget, Trakt sync.</dd>
-      <dt>Find</dt><dd>AlternativeTo, r/trakt, "TV Time alternative" searches.</dd></dl></div>
-    <div class="card aud" data-cid="s-a2" data-label="Audience 2: multi-medium fans"><div class="rank">2 · The core</div><h3>Four-app jugglers</h3><dl>
-      <dt>Who</dt><dd>People with Letterboxd, a show tracker, a games list and Goodreads.</dd>
-      <dt>Size</dt><dd>40% of fans want one place.</dd>
-      <dt>Hook</dt><dd class="q">"One app instead of four."</dd>
-      <dt>Show</dt><dd>Home with all four media, one search.</dd>
-      <dt>Find</dt><dd>r/SideProject, r/Android, Show HN.</dd></dl></div>
-    <div class="card aud" data-cid="s-a3" data-label="Audience 3: release watchers"><div class="rank">3</div><h3>Release watchers</h3><dl>
-      <dt>Who</dt><dd>Gamers and film fans who follow what is coming.</dd>
-      <dt>Size</dt><dd>20,000 Steam releases a year to keep up with.</dd>
-      <dt>Hook</dt><dd class="q">"Never miss a release day."</dd>
-      <dt>Show</dt><dd>The calendar, a reminder arriving.</dd>
-      <dt>Find</dt><dd>Clips timed to big releases, the calendar pages on Google.</dd></dl></div>
-    <div class="card aud" data-cid="s-a4" data-label="Audience 4: taste people"><div class="rank">4</div><h3>Taste and stats people</h3><dl>
-      <dt>Who</dt><dd>The ones who love Letterboxd stats and year-end wraps.</dd>
-      <dt>Size</dt><dd>Letterboxd has 30M members.</dd>
-      <dt>Hook</dt><dd class="q">"A score that shows its working."</dd>
-      <dt>Show</dt><dd>The Why sheet, Insights.</dd>
-      <dt>Find</dt><dd>r/letterboxd, Show HN, an Insights chart post.</dd></dl></div>
-    <div class="card aud" data-cid="s-a5" data-label="Audience 5: German speakers"><div class="rank">5 · Home market</div><h3>German speakers</h3><dl>
-      <dt>Who</dt><dd>Readers of German Android blogs.</dd>
-      <dt>Size</dt><dd>Small, and easier to reach.</dd>
-      <dt>Hook</dt><dd class="q">"Titel auf Deutsch, Starttermine für Deutschland."</dd>
-      <dt>Show</dt><dd>German titles, local release dates.</dd>
-      <dt>Find</dt><dd>mobiFlip, Caschys Blog, SmartDroid.</dd></dl></div>
+  <div class="auds" data-cid="s-auds" data-label="Audiences">
+    <div class="card aud" data-cid="s-a1" data-label="Audience 1: stranded show trackers">
+      <div class="who"><div class="rank">1 · Start here</div><h3>Stranded show trackers</h3><div class="q">"Your shows, with no cap on your list."</div></div>
+      <div class="f"><b>Who</b>Ex TV Time users and Trakt users who hit the free cap.</div>
+      <div class="f"><b>How many</b>25M lost their app in July 2026.</div>
+      <div class="f"><b>Show them</b>Up next, the home-screen widget, Trakt sync.</div>
+      <div class="f"><b>Find them</b>AlternativeTo, r/trakt, "TV Time alternative" searches.</div></div>
+    <div class="card aud" data-cid="s-a2" data-label="Audience 2: multi-medium fans">
+      <div class="who"><div class="rank">2 · The core</div><h3>Four-app jugglers</h3><div class="q">"One app instead of four."</div></div>
+      <div class="f"><b>Who</b>People with Letterboxd, a show tracker, a games list and Goodreads.</div>
+      <div class="f"><b>How many</b>40% of fans want one place.</div>
+      <div class="f"><b>Show them</b>Home with all four media, one search.</div>
+      <div class="f"><b>Find them</b>r/SideProject, r/Android, Show HN.</div></div>
+    <div class="card aud" data-cid="s-a3" data-label="Audience 3: release watchers">
+      <div class="who"><div class="rank">3</div><h3>Release watchers</h3><div class="q">"Never miss a release day."</div></div>
+      <div class="f"><b>Who</b>Gamers and film fans who follow what is coming.</div>
+      <div class="f"><b>How many</b>20,000 Steam releases a year to keep up with.</div>
+      <div class="f"><b>Show them</b>The calendar, a reminder arriving.</div>
+      <div class="f"><b>Find them</b>Clips timed to big releases, the calendar pages on Google.</div></div>
+    <div class="card aud" data-cid="s-a4" data-label="Audience 4: taste people">
+      <div class="who"><div class="rank">4</div><h3>Taste and stats people</h3><div class="q">"A score that shows its working."</div></div>
+      <div class="f"><b>Who</b>The ones who love Letterboxd stats and year-end wraps.</div>
+      <div class="f"><b>How many</b>Letterboxd has 30M members.</div>
+      <div class="f"><b>Show them</b>The Why sheet, Insights.</div>
+      <div class="f"><b>Find them</b>r/letterboxd, Show HN, an Insights chart post.</div></div>
+    <div class="card aud" data-cid="s-a5" data-label="Audience 5: German speakers">
+      <div class="who"><div class="rank">5 · Home market</div><h3>German speakers</h3><div class="q">"Titel auf Deutsch, Starttermine für Deutschland."</div></div>
+      <div class="f"><b>Who</b>Readers of German Android blogs.</div>
+      <div class="f"><b>How many</b>Small, and easier to reach.</div>
+      <div class="f"><b>Show them</b>German titles, local release dates.</div>
+      <div class="f"><b>Find them</b>mobiFlip, Caschys Blog, SmartDroid.</div></div>
   </div>
 
   <div class="grid g2" style="margin-top:14px">
@@ -609,7 +611,7 @@ body.cp-closed #cpanel{display:none}
 <section id="goals" data-title="Goals">
   <div class="eyebrow">How we know it worked</div>
   <h2>Goals for the first 90 days.</h2>
-  <p class="sub">A proposal. The beta will show how far off it is. Targets sit a little above the published averages.</p>
+  <p class="sub">A proposal. The first weeks will show how far off it is. Targets sit a little above the published averages.</p>
   <div class="grid g4" style="margin-top:18px">
     <div class="card tile hl" data-cid="go-1"><div class="n">1,500</div><div class="l">installs from Play</div><div class="s">by 17 May 2027</div></div>
     <div class="card tile" data-cid="go-2"><div class="n">4.5+</div><div class="l">stars, from at least 30 ratings</div><div class="s">4.0 already costs 17% of installs</div></div>
@@ -624,7 +626,7 @@ body.cp-closed #cpanel{display:none}
     <div class="card chart" data-cid="go-rating" data-label="Chart: rating and conversion">
       <h3>Why the first ratings matter so much</h3><div class="cs">Share of store visitors who still install, against a 5.0 app.</div>
       <div id="ch-rating"></div>
-      <p class="small" style="margin-top:10px">So the beta's job is to find the one-star bugs before launch day, and the review prompt goes to people who just rated their tenth title.</p>
+      <p class="small" style="margin-top:10px">So the one-star bugs have to be found before launch day, on your phone and your friends', and the review prompt goes to people who just rated their tenth title.</p>
     </div>
   </div>
   <div class="card" style="margin-top:14px" data-cid="go-gates" data-label="Gates">
@@ -642,7 +644,7 @@ body.cp-closed #cpanel{display:none}
     <li data-cid="f-2"><b>Each social profile links the Impressum.</b> Two clicks at most. Fines run to 50,000 euros.</li>
     <li data-cid="f-3"><b>Trakt's notice goes in the store description too</b>, not only in the app.</li>
     <li data-cid="f-4"><b>Never offer anything for a rating or review.</b> No giveaways tied to stars.</li>
-    <li data-cid="f-5"><b>A first Play release can't roll out in stages.</b> Everyone gets it at once, so the beta is the staging.</li>
+    <li data-cid="f-5"><b>A first Play release can't roll out in stages.</b> Everyone gets it at once, so the check on the test track is the only rehearsal.</li>
     <li data-cid="f-6"><b>The store video needs monetization off</b> on YouTube, or Play refuses it.</li>
     <li data-cid="f-7"><b>Your phone must uninstall the sideloaded app once</b> before installing from Play. Your rows come back on sign-in.</li>
     <li data-cid="f-8"><b>The site is rebuilt by a task on your PC each morning.</b> In launch week the PC stays on, or we publish by hand.</li>
@@ -660,7 +662,7 @@ body.cp-closed #cpanel{display:none}
       <tr><th>Risk</th><th>How likely</th><th>What we do</th></tr>
       <tr><td>The D-U-N-S or the account upgrade drags on</td><td>Medium</td><td>Decide on 15 Dec. Fallback: the personal route with 12 testers. Launch moves week for week.</td></tr>
       <tr><td>Play rejects the listing over cover art</td><td>Medium with real covers</td><td>Cleared covers only in store graphics.</td></tr>
-      <tr><td>A launch spike hits the free plan's limits</td><td>Medium</td><td>Workers Paid from the beta, a load rehearsal, the existing rate limits.</td></tr>
+      <tr><td>A launch spike hits the free plan's limits</td><td>Medium</td><td>Workers Paid before launch, a load rehearsal, the existing rate limits.</td></tr>
       <tr><td>Games data: the IGDB licence question is still open</td><td>Low before ads</td><td>Stay non-commercial. The kill switch exists. Say nothing that implies a licence.</td></tr>
       <tr><td>Posts get removed or nobody reacts</td><td>High for some</td><td>One place a day, an account with history, then rework and repost with a new clip.</td></tr>
       <tr><td>One person, one launch week</td><td>Certain</td><td>Everything written by 8 Feb. Weekend off. I draft replies, you send them.</td></tr>
@@ -669,7 +671,7 @@ body.cp-closed #cpanel{display:none}
   </div>
 
   <h4>Later, on purpose</h4>
-  <div class="card" data-cid="f-later"><p class="sub" style="max-width:none">A native iPhone app (99 dollars a year, and Apple files a sole trader as an individual). A waiting list by email (needs double opt-in; the beta link does the job). Paid ads. Board games, until BoardGameGeek answers. Public profiles and following.</p></div>
+  <div class="card" data-cid="f-later"><p class="sub" style="max-width:none">A native iPhone app (99 dollars a year, and Apple files a sole trader as an individual). A public beta or a tester drive (your call, 22 Nov: friends have tested it, and Google does not ask an organization account for one). A waiting list by email (needs double opt-in). Paid ads. Board games, until BoardGameGeek answers. Public profiles and following.</p></div>
 </section>
 
 <!-- ================================================================ SOURCES -->
@@ -1108,8 +1110,8 @@ function refresh() {
 }
 
 function toast(t, ms = 2600) { const el = $('#toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => (el.style.display = 'none'), ms); }
-function compose(el, quote, occ) {
-  draft = { anchor: el.dataset.cid, where: whereOf(el), quote: quote || '', occ: occ || 0 };
+function compose(el, quote, occ, from) {
+  draft = { anchor: el.dataset.cid, where: whereOf(from || el), quote: quote || '', occ: occ || 0 };
   document.body.classList.remove('cp-closed', 'cmode'); $('#btn-mode').classList.remove('on');
   tab = 'open'; setTabs(); renderPanel(); $('#cp-body').scrollTop = 0;
 }
@@ -1133,14 +1135,14 @@ function onSelect() {
   if (quote.length < 2) { pop.style.display = 'none'; return; }
   const full = root.textContent; let occ = 0, i = full.indexOf(quote);
   while (i >= 0 && i < start) { occ++; i = full.indexOf(quote, i + 1); }
-  sel = { root, quote, occ };
+  sel = { root, quote, occ, node };
   const rect = range.getBoundingClientRect();
   pop.style.left = scrollX + rect.left + rect.width / 2 + 'px'; pop.style.top = scrollY + rect.top - 8 + 'px'; pop.style.display = 'block';
 }
 document.addEventListener('mouseup', (e) => { if (e.target !== pop) setTimeout(onSelect, 0); });
 document.addEventListener('keyup', (e) => { if (e.shiftKey || e.key === 'Shift') onSelect(); });
 pop.addEventListener('mousedown', (e) => e.preventDefault());
-pop.addEventListener('click', () => { if (!sel) return; pop.style.display = 'none'; compose(sel.root, sel.quote, sel.occ); getSelection().removeAllRanges(); });
+pop.addEventListener('click', () => { if (!sel) return; pop.style.display = 'none'; compose(sel.root, sel.quote, sel.occ, sel.node); getSelection().removeAllRanges(); });
 
 // comment mode: click any block
 const typing = () => /^(TEXTAREA|INPUT)$/.test(document.activeElement?.tagName || '');
