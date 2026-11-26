@@ -16,6 +16,7 @@ import { api, type GameSearchResult, type ProviderResult } from '~/lib/api';
 import type { CardItem } from '~/lib/cards';
 import { TMDB_API_KEY, tmdbConfigured } from '~/lib/config';
 import { creditLine, creditWithParts, tmdbRole } from '~/lib/creditLine';
+import { holdCards } from '~/lib/homeFeed';
 
 const BASE = 'https://api.themoviedb.org/3';
 
@@ -277,7 +278,11 @@ async function collection(label: string, signal?: AbortSignal): Promise<CardItem
  * it has. Each half (TMDB, books, games) fails on its own: the others still
  * answer, and `failed` names the ones that did not. Throws only when aborted.
  */
-export async function providerFacet(kind: FacetPageKind, key: string, label: string, region: string, signal?: AbortSignal): Promise<ProviderFacet> {
+export async function providerFacet(
+  kind: FacetPageKind, key: string, label: string, region: string, signal?: AbortSignal,
+  /** Which of these ids the device's catalog copy holds. With it, a held title the copy lacks carries Fandex's facets (`holdCards`). */
+  inCopy?: (ids: string[]) => Promise<Set<string>>,
+): Promise<ProviderFacet> {
   const failed: ProviderHalf[] = [];
   const half = (h: ProviderHalf) => () => { failed.push(h); return [] as CardItem[]; };
   // Books run alongside too (Open Library, 2026-10-17): a subject's, an author's, a publisher's or a series'.
@@ -315,13 +320,9 @@ export async function providerFacet(kind: FacetPageKind, key: string, label: str
     if (ol) found.person = found.person ? { ...ol, ...Object.fromEntries(Object.entries(found.person).filter(([, v]) => v != null && !(Array.isArray(v) && !v.length))) } as FacetPerson : ol;
   }
   if (!found.cards.length) return { ...found, failed };
-  try {
-    const res = await api.lookup(found.cards.slice(0, 2000).map((c) => ({ source: c.source as string, type: c.type, id: c.sourceId as string })));
-    const held = new Map(res.found.map((f) => [`${f.source}:${f.type}:${f.id}`, f]));
-    found.cards = found.cards.map((c) => {
-      const f = held.get(c.key);
-      return f ? { ...c, id: f.mediaItemId, slug: f.slug ?? null } : c;
-    });
-  } catch { /* the cards still open; they just do not know your state */ }
+  // A provider can list a title under a tag its stored facets dropped (Open Library files The
+  // Windup Girl under steampunk as its 22nd subject; eight are kept). Such a card is scored from
+  // what Fandex stores, as its own page is, never from this page's facet.
+  await holdCards(found.cards, inCopy);
   return { ...found, failed };
 }

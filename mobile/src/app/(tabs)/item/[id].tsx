@@ -26,8 +26,9 @@ import { api, ApiError, type ItemDetail } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import type { CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
-import { itemStateFor } from '~/lib/db';
+import { catalogHas, itemStateFor } from '~/lib/db';
 import { shortDate } from '~/lib/dates';
+import { holdCards } from '~/lib/homeFeed';
 import { setReturnTo } from '~/lib/returnTo';
 import type { ScoreFacet } from '~/lib/fandexScore';
 import { rateItem, removeFromLibrary, setFollow, setHidden, setWishlist, type ActionTarget } from '~/lib/itemActions';
@@ -116,15 +117,8 @@ function Related({ itemId, facets, tmdbMovieId, igdbId, bookSeries }: {
         if (!live) return;
         const extra = label ? parts.filter((p) => !have.has(p)) : [];
         if (!label || !extra.length) { setRails(r); return; }
-        try {
-          const res = await api.lookup(extra.map((c) => ({ source: c.source as string, type: c.type, id: c.sourceId as string })));
-          const held = new Map(res.found.map((f) => [f.id, f]));
-          for (const c of extra) {
-            const f = held.get(c.sourceId as string);
-            c.id = f?.mediaItemId ?? null;
-            c.slug = f?.slug ?? null;
-          }
-        } catch { /* they open through /open all the same */ }
+        // A part Fandex holds outside the device's copy is scored from Fandex's facets, as its page is.
+        await holdCards(extra, (ids) => catalogHas(db, ids));
         if (!live) return;
         // The page's own title is never in its franchise rail, held or not.
         // A part the lookup named is dropped when the rail already holds that id under another name or year.

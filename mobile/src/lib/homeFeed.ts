@@ -100,6 +100,39 @@ export async function attachFacets(
   } catch { /* the cards keep their genres */ }
 }
 
+/** At most this many refs per lookup: the Worker's `LOOKUP_MAX`. */
+export const LOOKUP_MAX = 2000;
+
+/**
+ * Which of these provider cards Fandex holds, written onto each: its id and
+ * slug, and, with `inCopy`, the stored facets of the ones the device's catalog
+ * copy lacks (`attachFacets`). The one lookup for every page that merges
+ * provider cards, so a held title is scored from the facets its own page reads
+ * wherever it shows. A tag page did its own lookup without the facets and
+ * estimated instead, from the page's tag and the card's subjects: The Windup
+ * Girl read 84 on the steampunk page and 76 on its own (Nils, 2026-11-26).
+ * Cards past the lookup's limit stay unheld, and a failed lookup leaves every
+ * card as it was: they still open, they just do not know your state.
+ */
+export async function holdCards(
+  cards: CardItem[],
+  inCopy?: (ids: string[]) => Promise<Set<string>>,
+  ask: Pick<typeof api, 'lookup' | 'lookupFacets'> = api,
+): Promise<void> {
+  const refKey = (source: string, type: string, id: string) => `${source}:${type}:${id}`;
+  const asked = cards.filter((c) => c.source && c.sourceId).slice(0, LOOKUP_MAX);
+  if (!asked.length) return;
+  try {
+    const res = await ask.lookup(asked.map((c) => ({ source: c.source as string, type: c.type, id: c.sourceId as string })));
+    const held = new Map(res.found.map((f) => [refKey(f.source, f.type, f.id), f]));
+    for (const c of asked) {
+      const f = held.get(refKey(c.source as string, c.type, c.sourceId as string));
+      if (f) { c.id = f.mediaItemId; c.slug = f.slug ?? null; }
+    }
+  } catch { return; }
+  if (inCopy) await attachFacets(asked, inCopy, (refs) => ask.lookupFacets(refs));
+}
+
 /** A card's facets for the score: Fandex's own when it sent them, else its genres. */
 export const cardFacets = (c: { heldFacets?: ScoreFacet[]; genres?: string[] }): ScoreFacet[] => c.heldFacets ?? genreFacets(c.genres ?? []);
 
@@ -153,15 +186,8 @@ async function trendingPool(region: string): Promise<FeedCard[] | null> {
       });
     }
   }
-  try {
-    const res = await api.lookup(out.map((c) => ({ source: c.source as string, type: c.type, id: c.sourceId as string })));
-    const held = new Map(res.found.map((f) => [`${f.source}:${f.type}:${f.id}`, f]));
-    for (const c of out) {
-      const f = held.get(c.key);
-      c.id = f?.mediaItemId ?? null;
-      c.slug = f?.slug ?? null;
-    }
-  } catch { /* the cards still open; they just do not know your state */ }
+  // Ids only: the facets are asked for once, with the upcoming cards (`loadHomeFeed`).
+  await holdCards(out);
   return out;
 }
 
