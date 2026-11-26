@@ -103,6 +103,39 @@ function mergeTagTiers(norm: Map<Source, SourceNormalized>): { name: string; tie
   return out;
 }
 
+/**
+ * Keyword-tier tags a title's page shows, counted or not. The score counts
+ * `TIER_CAPS.keyword` of them; the page shows up to this many, because a tag
+ * a provider files a title under belongs on the title's page whether or not
+ * it moves the number (Nils, 2026-11-26: The Windup Girl sat on the steampunk
+ * page without the tag, which Open Library lists past the eight that count).
+ * Twenty-four covers nine rated films in ten and every book (a book's
+ * subjects stop at twenty); past it IGDB's list is the tail the cap was made for.
+ *
+ * Which ones COUNT was measured the same day on the owner's 1,750 scored
+ * titles (docs/fandex-score.md §3.9): no rule for choosing them, and no cap
+ * from 4 to all of them, moved the rating error by more than 0.004 of a
+ * point, and none held on both halves of the library. So the count stays.
+ */
+export const KEYWORD_DISPLAY_CAP = 24;
+
+/** Every source's keyword-tier tags in source order, one per tag key: the page's list, `KEYWORD_DISPLAY_CAP` at most. */
+function keywordNames(norm: Map<Source, SourceNormalized>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const s of TAG_SOURCES) {
+    for (const t of norm.get(s)?.tiers ?? []) {
+      if (t.tier !== "keyword") continue;
+      const key = tagKey(t.name);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(t.name);
+      if (out.length >= KEYWORD_DISPLAY_CAP) return out;
+    }
+  }
+  return out;
+}
+
 // Build the per-source normalized view once; everything below is policy over it.
 function normalizeAll(mediaLinks: { source: Source; data: any }[], type: MediaType): Map<Source, SourceNormalized> {
   const norm = new Map<Source, SourceNormalized>();
@@ -206,10 +239,13 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType, region: str
   const streamingLink = streamingRegion?.link ?? null;
   const streamingOfferType = streamingRegion?.offerType ?? null;
 
-  // ── TMDB credits + keywords (with letterboxd director fallback) ──
+  // ── TMDB credits (with letterboxd director fallback) ──
   const director = pickField(["tmdb", "letterboxd"], norm, "director");
   const cast = tmdb?.cast ?? [];
-  const keywords = dedup(tmdb?.keywords ?? []).slice(0, 12);
+  // Every source's keyword tier, for the page: TMDB's keywords, IGDB's, a book's
+  // subjects. TMDB's alone until 2026-11-26, so a film showed the keywords the
+  // score does not count and a book or a game did not.
+  const keywords = keywordNames(norm);
 
   // IMDb id — from TMDB external_ids/imdb_id or Trakt ids.
   const imdbId = pickField(["tmdb", "trakt"], norm, "imdbId");
@@ -369,6 +405,7 @@ export function explainMerge(mediaLinks: MediaLink[], type: MediaType): MergeFie
   // ── Union fields (same source lists + slices as mergeLinks) ───
   unionRow("images", IMAGE_SOURCES, dedup(unionValues(IMAGE_SOURCES, norm, "images")).slice(0, 12), (x) => x);
   unionRow("tags", TAG_SOURCES, dedup(mergeTagTiers(norm).map((t) => t.name)).slice(0, 30), (x) => x);
+  unionRow("keywords", TAG_SOURCES, keywordNames(norm), (x) => x);
   unionRow("platforms", PLATFORM_SOURCES, dedup(unionValues(PLATFORM_SOURCES, norm, "platforms")).slice(0, 10), (x) => x);
   unionRow("communityRatings", RATING_SOURCES, unionValues(RATING_SOURCES, norm, "communityRatings"), (x) => x.source);
   unionRow("gameModes", GAME_MODE_SOURCES, dedup(unionValues(GAME_MODE_SOURCES, norm, "gameModes")).slice(0, 8), (x) => x);
@@ -418,7 +455,6 @@ export function explainMerge(mediaLinks: MediaLink[], type: MediaType): MergeFie
     };
     tmdbRow("director", tmdb?.director ?? null);
     tmdbRow("cast", tmdb?.cast ?? []);
-    tmdbRow("keywords", dedup(tmdb?.keywords ?? []).slice(0, 12));
     tmdbRow("streamingProviders", tmdb?.streamingProviders ?? []);
   }
 

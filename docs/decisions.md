@@ -324,6 +324,12 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
 - **Every change to the score is measured first on two bars, per medium, wishlist held out** (`scripts/score-backtest.mjs`), and `public/score-how-it-works.svg` changes with the score.
 - **Not built, by Nils's call:** hand-curated tag bundles ("outsiders") and per-title tag overrides. Systemic data fixes only.
 
+### Added 2026-11-26, tags on a title's page (Nils)
+
+- **A title's page shows a tag even when the score does not count it.** Nils: "in the details page tags should show up even if they don't contribute to the score" (The Windup Girl was on the steampunk page and its own page had no steampunk). The page lists every source's keyword tier, up to 24 (`merged.keywords`); the score still counts eight, and the Why sheet lists only what counted.
+- **Which keywords count stays as it is: the first eight in the provider's order.** Measured that day on 1,750 of his rated titles: no cap from none to all and no rule for choosing them (tags the pool knows first, weighted categories first, most common first) moved the rating error by more than 0.004 of a point, and none held on both halves of the library. → `docs/fandex-score.md` §3.9
+- **A card scores as its title's page does.** A title Fandex holds is scored from its stored facets wherever it shows, or shows no number; an estimate is only for a title nobody holds.
+
 ### Added 2026-11-07, the calendar and Up next (Nils)
 
 - **The calendar shows a show's own release (its first season), and a later season only when you have watched every episode before it.** Rings of Power, seasons 1 and 2 seen: season 3 is on the calendar. A show left halfway through season 1: its season 2 is not, because you have episodes left. "Watched everything before it" is Up next's answer from Trakt, never a count against TMDB's episode numbers (`mobile/src/lib/seasonPremieres.ts`).

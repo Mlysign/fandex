@@ -176,7 +176,22 @@ Every tag facet now carries a **tier** and a **rank** (`src/types` `TagTier`, `s
 | `voted` | what a crowd put on the title and ranked | Steam's store tags (by votes), RAWG's tags (English only), Hardcover's | 20 |
 | `keyword` | the long editorial tail | TMDB and IGDB keywords, a book's subjects, BGG theme families | 8 |
 
-The normalizers (`sources/normalize.ts`) emit each source's tags with their tier in the source's own order, noise (`meta`) last; `mergeLinks` files every tag under the best tier any source gave it, orders a tier by source then rank, caps it (`TIER_CAPS`), numbers it 1 first, and lets a tag the cap leaves out fall back to the next tier that lists it (Steam's fifteenth tag is often the specific one). `extractFacets` reads that list (`merged.tagTiers`), and `merged.tags`, the display list, is the same tags in tier order, so the chips on a page are the facets the score reads.
+The normalizers (`sources/normalize.ts`) emit each source's tags with their tier in the source's own order, noise (`meta`) last; `mergeLinks` files every tag under the best tier any source gave it, orders a tier by source then rank, caps it (`TIER_CAPS`), numbers it 1 first, and lets a tag the cap leaves out fall back to the next tier that lists it (Steam's fifteenth tag is often the specific one). `extractFacets` reads that list (`merged.tagTiers`), and `merged.tags`, the display list, is the same tags in tier order. Since 2026-11-26 a title's page also shows the keyword tier past the cap (`merged.keywords`, every source's, up to `KEYWORD_DISPLAY_CAP` 24): a tag a provider files a title under is on the title's page whether or not it counts (Nils; before, a film showed TMDB's first twelve keywords and a book or a game only the counted eight).
+
+**Which keywords count was measured before that call (2026-11-26).** On the owner's library, 1,750 scored titles, every rated title re-derived from its stored provider records with the keyword tier uncapped (the re-derive at eight equals the stored facets on all 1,757), the gains refitted for each rule, off by against today's rule with a paired bootstrap. More than eight candidates sit on 66% of his films, 32% of shows, 50% of games.
+
+| rule for the keyword tier | all media: off by | against today |
+|---|---|---|
+| guessing the medium's average | 1.606 | |
+| none | 1.499 | +0.004 |
+| the first 4 | 1.497 | +0.001 |
+| **the first 8 (shipped)** | **1.496** | |
+| the first 12 · 16 · 24 | 1.494 · 1.493 · 1.493 | −0.003 |
+| all of them | 1.500 | +0.004 (games +0.012) |
+| tags 3 or more pool titles carry first, then 8 · 12 | 1.495 · 1.492 | −0.001 · −0.004 |
+| tags in a weighted category first, 8 · sorted out of Other first, 8 · most common first, 8 | 1.497 · 1.496 · 1.496 | 0 |
+
+Nothing moves the error by more than 0.004 of a rating point, and what gained did so on one half of the library only (the first 12: −0.005 and 0.000; known first, 12: −0.008 and 0.000; all: −0.006 and +0.014), under the 0.01 the weekly weight search asks of a change (§3.11). The eight stay. Books are 26 rated titles and say nothing either way; the 40 outside libraries (§11) were not run. Harness: the session's scratchpad (it reads one person's library).
 
 **Steam's voted tags** come from `IStoreBrowseService/GetItems` (`src/lib/sources/steam.ts`, the Web API terms cover it), written by the cron (`runSteamTagsStep`) onto the IGDB payload as `steamTags` for every pool game that names a Steam page, the way `collections` were: not a Steam link, which would also make Steam's header the game's backdrop. 1,218 of 1,313 such games answered with tags on 2026-10-25, 17 each.
 

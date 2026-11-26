@@ -42,8 +42,14 @@ import type { EnrichedItem, MediaLink, MediaType, Source } from "@/types";
  * title is one entry in every language. Films and shows get theirs from the
  * TMDB refetch (PROJECTION_VERSION 5), books from the Hardcover titles walk,
  * games straight from the stored IGDB record through the re-derive walk.
+ * 6 (2026-11-26): the page's tags. `merged.keywords` is every source's keyword
+ * tier (a book's subjects, IGDB's keywords, TMDB's), up to 24, where it was
+ * TMDB's first 12: a title's page shows a tag whether or not the score counts
+ * it (src/lib/merge.ts, `KEYWORD_DISPLAY_CAP`). Only the merged doc moves, and
+ * that heals on read; the vector and the FACETS are what they were, so no
+ * device needs anything and the re-derive walk is not needed for this one.
  */
-export const DERIVE_VERSION = 5;
+export const DERIVE_VERSION = 6;
 
 /** One media_links row as the write path holds it: the blob already parsed. */
 export interface ParsedLink {
