@@ -453,6 +453,29 @@ export async function searchCatalog(db: SQLiteDatabase, normTerm: string, limit 
   );
 }
 
+/** These titles as cards, in no particular order. A title the copy does not hold is absent. */
+export async function catalogCardsById(db: SQLiteDatabase, ids: string[]): Promise<CatalogRow[]> {
+  const out: CatalogRow[] = [];
+  for (let i = 0; i < ids.length; i += 200) {
+    const chunk = ids.slice(i, i + 200);
+    out.push(...await db.getAllAsync<CatalogRow>(`SELECT ${CARD_COLUMNS} FROM catalog WHERE id IN (${chunk.map(() => '?').join(',')})`, chunk));
+  }
+  return out;
+}
+
+/**
+ * Every title you picked (your library, your wishlist), with whether you hold it and the rating you gave:
+ * the average of the per-provider scores above zero, as the Library list reads it.
+ */
+export async function pickStates(db: SQLiteDatabase): Promise<Map<string, { held: boolean; rating: number | null }>> {
+  const rows = await db.getAllAsync<{ id: string; held: number; rating: number | null }>(
+    `SELECT media_item_id AS id, MAX(CASE WHEN relation = 'library' THEN 1 ELSE 0 END) AS held,
+            AVG(CASE WHEN relation = 'library' AND rating > 0 THEN rating END) AS rating
+       FROM item_state WHERE relation IN ('library', 'wishlist') GROUP BY media_item_id`,
+  );
+  return new Map(rows.map((r) => [r.id, { held: !!r.held, rating: r.rating }]));
+}
+
 /**
  * Every title on the device, as cards. A few hundred kilobytes for the whole
  * pool, which is what lets Search filter and sort it without paging: a filter

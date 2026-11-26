@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ScoreBand, ScoreFacet } from '~/lib/fandexScore';
 import { fitPullModel, type PullPick, type PullTitle } from '~/lib/pullModel';
-import { MAX_RAILS_PER_KIND, MAX_SEEK_RAILS, MIN_SEEK_RAIL, parseSeekList, SEEK_LIST_VERSION, seekFacets, seekRails, sortSeek, type SeekFacet } from '~/lib/seekOut';
+import { MAX_RAILS_PER_KIND, MAX_SEEK_RAILS, MIN_SEEK_RAIL, parseSeekList, SEEK_LIST_VERSION, seekFacets, seekRails, sortSeek, yourTitles, type PickState, type SeekFacet } from '~/lib/seekOut';
 
 // What you seek out (lib/seekOut.ts): the list Insights shows and the rails
 // the Recommendations page is made of. The model's own maths is pullModel.test.ts.
@@ -25,7 +25,7 @@ describe('what you seek out', () => {
     const list = seekFacets(model, named(tag('steampunk'), tag('drama', 'genre')));
     expect(list.map((f) => f.key)).toEqual(['steampunk']);
     const [steampunk] = list;
-    expect(steampunk).toMatchObject({ id: 'tag|steampunk', kind: 'tag', label: 'Steampunk', category: 'setting', titles: 40, media: ['movie'], facetIds: ['tag||steampunk'] });
+    expect(steampunk).toMatchObject({ id: 'tag|steampunk', kind: 'tag', label: 'Steampunk', category: 'setting', titles: 40, media: ['movie'], mainId: 'tag||steampunk', facetIds: ['tag||steampunk'] });
     // 40 of your 100 against 5 in 100 of the baseline: about eight times, half a title added to both sides.
     expect(steampunk.times).toBeCloseTo(40.5 / 5.5, 5);
     expect(steampunk.weight).toBeGreaterThan(0);
@@ -50,7 +50,7 @@ describe('what you seek out', () => {
     const m = fitPullModel(mine, base, OPTS)!;
     const list = seekFacets(m, named(person('director', 'tim burton'), person('writer', 'tim burton')));
     expect(list).toHaveLength(1);
-    expect(list[0]).toMatchObject({ id: 'person|tim burton', role: 'director', titles: 18 });
+    expect(list[0]).toMatchObject({ id: 'person|tim burton', role: 'director', mainId: 'person|director|tim burton', titles: 18 });
     expect(list[0].facetIds).toContain('person|director|tim burton');
   });
 
@@ -73,9 +73,25 @@ describe('what you seek out', () => {
   });
 });
 
+describe('your own titles behind a row', () => {
+  const pick = (held: boolean, rating: number | null): PickState => ({ held, rating });
+
+  it('lists what you rated first, highest first, then the rest of your library, then your wishlist', () => {
+    const picks = new Map([['low', pick(true, 4)], ['high', pick(true, 9)], ['unrated', pick(true, null)], ['wished', pick(false, null)]]);
+    const carriers = () => ['wished', 'unrated', 'low', 'not-yours', 'high'];
+    expect(yourTitles({ facetIds: ['tag||steampunk'] }, carriers, picks)).toEqual(['high', 'low', 'unrated', 'wished']);
+  });
+
+  it('counts a title once when it carries the entry in two roles', () => {
+    const picks = new Map([['a', pick(true, 7)], ['b', pick(true, 8)]]);
+    const carriers = (id: string) => (id === 'person|director|x' ? ['a', 'b'] : ['b']);
+    expect(yourTitles({ facetIds: ['person|director|x', 'person|writer|x'] }, carriers, picks)).toEqual(['b', 'a']);
+  });
+});
+
 describe('the rails', () => {
   const facet = (key: string, kind: SeekFacet['kind'] = 'tag', weight = 1): SeekFacet =>
-    ({ id: `${kind}|${key}`, kind, key, label: key, facetIds: [`${kind}||${key}`], weight, times: 4, titles: 10, media: ['movie'] });
+    ({ id: `${kind}|${key}`, kind, key, label: key, mainId: `${kind}||${key}`, facetIds: [`${kind}||${key}`], weight, times: 4, titles: 10, media: ['movie'] });
   const card = (id: string, type = 'movie') => ({ id, type });
   const band = (score: number): { score: number; band: ScoreBand } => ({ score, band: score >= 70 ? 'high' : score < 50 ? 'low' : 'usual' });
 

@@ -44,6 +44,8 @@ export interface SeekFacet {
   role?: string;
   /** A tag's category, after the taxonomy. */
   category?: string;
+  /** The facet id the numbers below are of (`kind|role|key`): the role the model weighs most. */
+  mainId: string;
   /** Every facet id of this entry the model weighs (a director who also writes has two): what a title must carry one of. */
   facetIds: string[];
   /** The model's coefficient, natural log: how much more often a title with it is one of your picks, other facets held equal. What the list is ranked by. */
@@ -73,7 +75,7 @@ export function seekFacets(
     if (!f || !plain || plain.times < MIN_SEEK_TIMES || plain.titles < MIN_SEEK_TITLES) continue;
     const id = `${f.kind}|${f.key}`;
     const row: SeekFacet = {
-      id, kind: f.kind, key: f.key, label: f.label, facetIds: [facetId], weight: beta, times: plain.times, titles: plain.titles, media: [...plain.media].sort(),
+      id, kind: f.kind, key: f.key, label: f.label, mainId: facetId, facetIds: [facetId], weight: beta, times: plain.times, titles: plain.titles, media: [...plain.media].sort(),
       ...(f.kind !== 'tag' && f.kind !== 'ip' && f.role ? { role: f.role } : {}),
       ...(f.kind === 'tag' ? { category: categoryOf(f) } : {}),
     };
@@ -101,7 +103,7 @@ export function parseSeekList(v: unknown): SeekList | null {
   if (!v || typeof v !== 'object') return null;
   const o = v as Partial<SeekList>;
   if (o.v !== SEEK_LIST_VERSION || typeof o.picks !== 'number' || typeof o.baseline !== 'number' || !Array.isArray(o.facets)) return null;
-  const whole = (f: Partial<SeekFacet> | null) => !!f && typeof f.id === 'string' && KINDS.has(f.kind as string) && typeof f.key === 'string' && typeof f.label === 'string'
+  const whole = (f: Partial<SeekFacet> | null) => !!f && typeof f.id === 'string' && KINDS.has(f.kind as string) && typeof f.key === 'string' && typeof f.label === 'string' && typeof f.mainId === 'string'
     && Array.isArray(f.facetIds) && f.facetIds.every((x) => typeof x === 'string') && Array.isArray(f.media)
     && typeof f.weight === 'number' && typeof f.times === 'number' && typeof f.titles === 'number';
   return o.facets.every(whole) ? { v: o.v, facets: o.facets, picks: o.picks, baseline: o.baseline } : null;
@@ -114,6 +116,24 @@ export function sortSeek(list: SeekFacet[], order: SeekOrder): SeekFacet[] {
   if (order === 'weight') return list;
   const value = (f: SeekFacet) => (order === 'times' ? f.times : f.titles);
   return [...list].sort((a, b) => value(b) - value(a) || b.weight - a.weight);
+}
+
+/** One of your picks, as a list of your own titles needs it: in your library or only wishlisted, and what you gave it. */
+export interface PickState { held: boolean; rating: number | null }
+
+/**
+ * Your own titles carrying a thing you seek out, for the rail a tapped row
+ * opens: what you rated first, highest first, then the rest of your library,
+ * then what you only wishlisted. In any role the entry is weighed in.
+ */
+export function yourTitles(facet: Pick<SeekFacet, 'facetIds'>, carriers: (facetId: string) => readonly string[], picks: ReadonlyMap<string, PickState>): string[] {
+  const ids = new Set<string>();
+  for (const facetId of facet.facetIds) for (const id of carriers(facetId)) if (picks.has(id)) ids.add(id);
+  const rank = (id: string) => {
+    const p = picks.get(id) as PickState;
+    return !p.held ? 2 : p.rating == null ? 1 : 0;
+  };
+  return [...ids].sort((a, b) => rank(a) - rank(b) || (picks.get(b)?.rating ?? 0) - (picks.get(a)?.rating ?? 0) || (a < b ? -1 : 1));
 }
 
 // ── The rails ────────────────────────────────────────────────────────────────

@@ -333,10 +333,13 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
 
 ### Added 2026-11-26, what you seek out (docs/fandex-score.md §3.7.1)
 
-- **How many titles of a facet you logged stays out of the score, and is shown as what it is.** The score predicts a rating; what you pick is pull. Pull is on the screen again in two places where no score stands beside it: Insights' "What you seek out" and the Recommendations page. In words and counts, never points. `PULL_SHOWN` stays false: nothing returns to a title's page, the Why sheet or a facet page.
+- **How many titles of a facet you logged stays out of the score, and is shown as what it is.** The score predicts a rating; what you pick is pull. Pull is on the screen again in two places where no score stands beside it: Insights' "What you seek out" and the Recommendations page. In words and counts, never points. `PULL_SHOWN` stays false: nothing returns to a title's page or the Why sheet, and no pull points or Follow to a facet page.
+- **A facet's page says what its Insights row says** (Nils): one "Picks 4×" line in words under the Taste pill, marked "not part of your score".
+- **An Insights row is the name, the sentence and "picked of what Fandex holds"; a tap lists your own titles under it** (Nils: no bar, no "vs avg" column).
 - **Home's Recommended rail leads to `/recommendations` with See all** (Nils). The page is rails: the best matches, then "Because you seek out X".
 - **On those rails the facet picks and the score gates.** A title the score puts below your usual is never recommended (2026-10-17 stands), whatever you seek out. The kinds take turns, or franchises fill the page.
 - **The pull fit belongs to the screens that show it, never to the score's profile.** Fitted on demand, kept on the device, and no score waits for it.
+- **Open, with Nils on a design board:** "What you seek out" and the three rating sections become one facet section (picks, your average, score impact in one row), and the facet page follows it. Nothing of that is built until it is drawn.
 - **Open, Nils's to decide after seeing the page:** Recommendations in the bottom bar in Search's place, with search as an icon at the top right that opens a window (TASKS.md).
 
 ### Added 2026-11-05, the UI review
