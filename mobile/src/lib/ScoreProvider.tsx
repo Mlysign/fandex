@@ -53,7 +53,7 @@ const TAXONOMY_CHECK_GAP_MS = 60_000;
  * the baseline and the taxonomy, but not the facets the catalog copy carries
  * for those titles, which a sync can change; a weekly fit catches that up.
  */
-const PULL_FIT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+export const PULL_FIT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 /** Host parameters per statement, kept well under any SQLite build's limit. */
 const ID_CHUNK = 200;
 
@@ -130,6 +130,9 @@ export function textPrint(text: string): string {
   return `${(a >>> 0).toString(36)}.${(b >>> 0).toString(36)}.${text.length}`;
 }
 
+/** The fingerprint of a taxonomy this provider prepared, or null for one it did not. */
+export const taxonomyPrint = (tax: Taxonomy): string | null => taxonomyPrints.get(tax) ?? null;
+
 function preparedTaxonomy(raw: string): Taxonomy {
   const tax = prepareTaxonomy(JSON.parse(raw) as TaxonomyJson);
   taxonomyPrints.set(tax, textPrint(raw));
@@ -173,6 +176,11 @@ export async function storedBaseline(db: SQLiteDatabase): Promise<{ id: string; 
     const json = JSON.parse(raw) as BaselineJson;
     return Array.isArray(json?.items) ? json.items.filter((r) => typeof r[0] === 'string').map((r) => ({ id: r[0], fresh: r[2] === 1 })) : [];
   } catch { return []; }
+}
+
+/** Which baseline list the device holds (its ETag), or null with none: part of what a pull fit is keyed by. */
+export async function baselineIdentity(db: SQLiteDatabase): Promise<string | null> {
+  return (await getMeta(db, BASELINE_ETAG_KEY)) || null;
 }
 
 /** The stored baseline ids. */
@@ -248,6 +256,20 @@ export async function consumedTitles(db: SQLiteDatabase): Promise<ConsumedTitle[
   return rows.map((r) => ({ id: r.id, type: r.type, facets: parseFacets(r.facets), weight: r.held ? 1 : WISHLIST_WEIGHT }));
 }
 
+/**
+ * Your picks as `consumedTitles` lists them, without their facets: enough for
+ * `pullSignature`, so asking "did my picks change?" does not parse a library.
+ */
+export async function pickWeights(db: SQLiteDatabase): Promise<{ id: string; weight: number }[]> {
+  const rows = await db.getAllAsync<{ id: string; held: number }>(
+    `SELECT c.id, MAX(CASE WHEN s.relation = 'library' THEN 1 ELSE 0 END) AS held
+       FROM item_state s JOIN catalog c ON c.id = s.media_item_id
+      WHERE s.relation IN ('library', 'wishlist')
+      GROUP BY c.id`,
+  );
+  return rows.map((r) => ({ id: r.id, weight: r.held ? 1 : WISHLIST_WEIGHT }));
+}
+
 const REPORT_AT_KEY = 'score_report_at';
 const REPORT_SIG_KEY = 'score_report_sig';
 /** A report goes out at most this often, unless the rated count moved by `REPORT_RATED_STEP` since the last one. */
@@ -297,23 +319,35 @@ export async function pullModelFor(db: SQLiteDatabase, consumed: ConsumedTitle[]
   return runSliced(buildPullModelSteps(consumed, await baselineTitles(db, list), tax, stored), { alive });
 }
 
-/** The stored pull fit when it was made under `key` within the last week, else null. */
-async function storedPullFit(db: SQLiteDatabase, key: string): Promise<StoredPullFit | null> {
+/**
+ * The pull fit the device keeps, with the key it was made under and when, or null (none, an older shape, a damaged row).
+ * `seek` is what lib/SeekOutProvider.tsx kept beside it (the list the fit made), unread here.
+ */
+export async function storedPullFitRow(db: SQLiteDatabase): Promise<{ key: string; at: number; fit: StoredPullFit; seek?: unknown } | null> {
   const raw = await getMeta(db, PULL_FIT_KEY);
   if (!raw) return null;
   try {
-    const row = JSON.parse(raw) as { key?: unknown; at?: unknown; fit?: unknown };
-    if (row.key !== key || typeof row.at !== 'number' || Date.now() - row.at > PULL_FIT_MAX_AGE_MS) return null;
-    return parseStoredFit(row.fit);
+    const row = JSON.parse(raw) as { key?: unknown; at?: unknown; fit?: unknown; seek?: unknown };
+    const fit = parseStoredFit(row.fit);
+    return fit && typeof row.key === 'string' && typeof row.at === 'number' ? { key: row.key, at: row.at, fit, seek: row.seek } : null;
   } catch {
     return null;
   }
 }
 
-/** Keep a fit for the next start. A failed write costs only a fit then. */
-async function keepPullFit(db: SQLiteDatabase, key: string, model: PullModel): Promise<void> {
+/** The stored pull fit when it was made under `key` within the last week, else null. */
+async function storedPullFit(db: SQLiteDatabase, key: string): Promise<StoredPullFit | null> {
+  const row = await storedPullFitRow(db);
+  return row && row.key === key && Date.now() - row.at <= PULL_FIT_MAX_AGE_MS ? row.fit : null;
+}
+
+/**
+ * Keep a fit for the next start. A failed write costs only a fit then. `seek`: the list made from it
+ * (lib/SeekOutProvider.tsx), kept in the same row so a sign-out forgets both together.
+ */
+export async function keepPullFit(db: SQLiteDatabase, key: string, model: PullModel, seek?: unknown): Promise<void> {
   try {
-    await setMeta(db, PULL_FIT_KEY, JSON.stringify({ key, at: Date.now(), fit: storedFitOf(model) }));
+    await setMeta(db, PULL_FIT_KEY, JSON.stringify({ key, at: Date.now(), fit: storedFitOf(model), ...(seek === undefined ? {} : { seek }) }));
   } catch { /* the next start fits again */ }
 }
 
@@ -358,7 +392,7 @@ async function keepOwnGains(db: SQLiteDatabase, print: string, gains: Gains, use
 }
 
 /** How many of the baseline titles the catalog copy holds: while the Worker is still adding them, this is what grows. */
-async function baselinePresent(db: SQLiteDatabase): Promise<number> {
+export async function baselinePresent(db: SQLiteDatabase): Promise<number> {
   const ids = await storedBaselineIds(db);
   let n = 0;
   for (let i = 0; i < ids.length; i += ID_CHUNK) {
@@ -374,8 +408,14 @@ async function baselinePresent(db: SQLiteDatabase): Promise<number> {
  * moves on every sync: fitting is seconds on a phone, and a sync that only
  * refreshed some titles' details changes next to nothing in it.
  */
-const pullSignature = (consumed: ConsumedTitle[], present: number, baseline: string | null) =>
+export const pullSignature = (consumed: { id: string; weight: number }[], present: number, baseline: string | null) =>
   `${present}|${baseline ?? ''}|${consumed.map((c) => `${c.id}:${c.weight}`).sort().join(',')}`;
+
+/** What a stored pull fit is kept under: the fit's version, the taxonomy and `pullSignature`. Null for a taxonomy with no fingerprint. */
+export const pullFitKey = (tax: Taxonomy, signature: string): string | null => {
+  const print = taxonomyPrints.get(tax);
+  return print ? `${PULL_FIT_VERSION}|${print}|${signature}` : null;
+};
 
 export function ScoreProvider({ children }: { children: ReactNode }) {
   const db = useSQLiteContext();
@@ -479,8 +519,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       if (!cached || cached.signature !== signature || cached.tax !== taxonomy) {
         const fitStarted = Date.now();
         // What a stored fit must have been made on to stand in for this one.
-        const print = taxonomyPrints.get(taxonomy);
-        const fitKey = print ? `${PULL_FIT_VERSION}|${print}|${signature}` : null;
+        const fitKey = pullFitKey(taxonomy, signature);
         const stored = fitKey ? await storedPullFit(db, fitKey) : null;
         if (!live) return;
         reused = !!stored;

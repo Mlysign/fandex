@@ -117,22 +117,28 @@ export function CardFace({ item, match, link, bar, style, dateText, explain }: {
   );
 }
 
-/** A rail's title row: serif title, an optional FOR YOU pill, and whatever goes on the right. */
-export function RailTitle({ title, forYou, action }: { title: string; forYou?: boolean; action?: ReactNode }) {
+/**
+ * A rail's title row: serif title, an optional FOR YOU pill, and whatever goes on the right.
+ * `note`: one quiet line under it, for a rail that owes a reason (the Recommendations page's "Because you seek out …").
+ */
+export function RailTitle({ title, forYou, action, note }: { title: string; forYou?: boolean; action?: ReactNode; note?: string }) {
   return (
-    <View style={cardStyles.railHead}>
-      <View style={cardStyles.railTitle}>
-        {/* An <h2> on the web: as a bare header it was a third <h1> on every title page (2026-10-23). */}
-        <Text accessibilityRole="header" {...({ 'aria-level': 2 } as object)} style={type.serifMd}>{title}</Text>
-        {forYou ? <View style={cardStyles.forYou}><Text style={[type.micro, { color: color.accent }]}>For you</Text></View> : null}
+    <>
+      <View style={[cardStyles.railHead, note ? { marginBottom: 2 } : null]}>
+        <View style={cardStyles.railTitle}>
+          {/* An <h2> on the web: as a bare header it was a third <h1> on every title page (2026-10-23). */}
+          <Text accessibilityRole="header" {...({ 'aria-level': 2 } as object)} style={type.serifMd}>{title}</Text>
+          {forYou ? <View style={cardStyles.forYou}><Text style={[type.micro, { color: color.accent }]}>For you</Text></View> : null}
+        </View>
+        {action}
       </View>
-      {action}
-    </View>
+      {note ? <Text style={[type.caption, cardStyles.railNote]}>{note}</Text> : null}
+    </>
   );
 }
 
 /** A titled row that scrolls sideways. `headless`: the page already titles it, so `title` only names the arrows. */
-export function RailFrame({ title, forYou, action, headless, children }: { title: string; forYou?: boolean; action?: ReactNode; headless?: boolean; children: ReactNode }) {
+export function RailFrame({ title, forYou, action, headless, note, children }: { title: string; forYou?: boolean; action?: ReactNode; headless?: boolean; note?: string; children: ReactNode }) {
   // The site's chevrons (Rail.tsx): on a wide window, fading in while the
   // pointer is over the rail, each a step of 320 px. A phone scrolls by finger.
   const { width } = useWindowDimensions();
@@ -155,7 +161,7 @@ export function RailFrame({ title, forYou, action, headless, children }: { title
   const cells = Platform.OS === 'web' ? null : Children.toArray(children);
   return (
     <View>
-      {headless ? null : <RailTitle title={title} forYou={forYou} action={action} />}
+      {headless ? null : <RailTitle title={title} forYou={forYou} action={action} note={note} />}
       <View
         style={{ position: 'relative' }}
         {...(wide ? ({ onPointerEnter: () => setHovering(true), onPointerLeave: () => setHovering(false) } as object) : null)}>
@@ -286,6 +292,7 @@ export const cardStyles = StyleSheet.create({
   barBtnIdle: { backgroundColor: color.fillIdle, borderColor: color.fillIdleBorder },
   railHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, paddingHorizontal: 4 },
   railTitle: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
+  railNote: { marginBottom: 12, paddingHorizontal: 4 },
   forYou: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.full, backgroundColor: color.accentSubtle },
   railRow: { gap: 12, paddingBottom: 4 },
   railList: { paddingBottom: 4 },

@@ -11,7 +11,7 @@
 
 ## ⚠️ Needs Nils: this is the whole list
 
-Eight items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
+Nine items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
 
 0. **🔵 APP + WEBSITE ON CLOUDFLARE: online since 2026-10-10.** The plan is [docs/app-plan.md](docs/app-plan.md); the references are [docs/website.md](docs/website.md), [docs/worker.md](docs/worker.md) and [docs/app.md](docs/app.md).
    - **(a) Keep using the app and the site, and say what is off.** **Asked of him and not answered yet:** only **0.3.45's first run** (a new account's two windows: run end to end on the local stack in a browser 2026-11-07, never on the phone, and a real new account through Trakt, Google or Discord has not been made). Feedback on feel goes into numbers in `mobile/src/lib/feel.ts` and `components/pressFeel.ts`, never back to him as a question (memory `rating-feel-from-bubblewrap`). Everything else asked here was checked by Nils on 2026-11-13 (archive: grep `2026-11-13`). The episode sheet, the Harry Potter rails and the type filter's one tap were checked over adb on 2026-11-06 (archive: grep `2026-11-06`). Every admin write, Review's Add and disconnecting one of two sign-ins were run on the local stack on 2026-10-23 and work (archive: grep "the open tasks").
@@ -27,6 +27,8 @@ Eight items. Everything else in this file is work I can do without him, and ever
 9. **🔵 One real Steam connect, by him** (Settings, "Connect Steam", on the phone and once in a browser). Built and covered by tests; the real Steam page has not been through it.
 
 10. **🔵 What only he can do from the security audit of 2026-11-22.** The list is `docs/release-plan/private/security-audit-2026-11-22.md` (not in git): every row whose status is "Nils", sections A to E. The first row of section A comes before everything else on this list. Each Cloudflare setting in section E I can set on his word.
+
+11. **🔵 Look at the Recommendations page, then decide the bottom bar** (his idea, 2026-11-26): Recommendations in Search's place, search as an icon at the top right of some pages that opens a window. Nothing in the navigation changed yet; the page is reached from Home's See all and from Insights.
 
 4. **🔵 Board games are built and switched off until a BoardGameGeek token exists** (2026-10-17). **Applied 2026-10-17, still "pending" on 2026-11-21** (read in his Chrome) at boardgamegeek.com/applications (account Ramses3006, application "Fandex"), and no mail from BGG in his Gmail since 2024. Nils: once BGG approves it, create the token there and add `BGG_TOKEN=` to the repo's `.env` (a token never passes through a session). Then mine: `node worker/scripts/push-secrets.mjs`, check `/v1/features` says `boardgames: true`, put the official "Powered by BGG" logo where the text credit is now (the terms require the logo), publish, build an APK. → [PLATFORMS.md](PLATFORMS.md)
 
@@ -64,7 +66,8 @@ Phone checks on 0.3.62 back to 0.3.58; everything else waits on Nils (above), Bo
 Parked, not started. Each needs a design talk with Nils before any code.
 
 - **A proper profile page, with following.** Users can follow each other and open each other's profiles. Clashes with a standing call: the You tab is lighter than the old site's profile page on purpose ([docs/decisions.md](docs/decisions.md), "The You tab"), so settle where a profile lives before building. A public profile also needs a privacy setting and an erasure path (→ [[account-erasure-and-export]]).
-- **A "what now?" page**: help pick something to watch, binge, play or read right now. Overlaps Search's Picks (`docs/app.md`, Search row); decide whether this grows Picks or is its own screen, and whether it draws from the library, the wishlist or the whole catalog. Pull (what you seek out) and Follow come back here: they are hidden from the app since 2026-11-05 behind `PULL_SHOWN` (`mobile/src/lib/scoreReasons.ts`). When they do, Follow and Not interested become icons at the top right, and Not interested is the same button as a title's "Hide from suggestions" (Nils, Miro board).
+- **🔵 The Recommendations page and Insights' "What you seek out" are built (2026-11-26), not shipped.** Next: an APK and a publish (raise `version`, add the `whatsNew.ts` entry), then Nils looks at both with his own library. Not measured: the fit's seconds on the phone. Usage counts do not know the screen yet (`screenKey`, and the Worker's `APP_COUNT_KEYS` with it). → `docs/fandex-score.md` §3.7.1
+- **A "what now?" page**: help pick something to watch, binge, play or read right now. Overlaps Search's Picks (`docs/app.md`, Search row) and now the Recommendations page; decide whether it grows one of them or is its own screen, and whether it draws from the library, the wishlist or the whole catalog. Follow comes back here: it is hidden since 2026-11-05 behind `PULL_SHOWN` (`mobile/src/lib/scoreReasons.ts`). When they do, Follow and Not interested become icons at the top right, and Not interested is the same button as a title's "Hide from suggestions" (Nils, Miro board).
 - **A series' order, and main entry vs spin-off**, on the "More from…" rail of a book, film or game (Nils, 2026-11-05). Needs a data source per medium.
 - **A customisable Insights page with showcases**, the way Steam profiles have them: graphs, favourite titles (Nils, 2026-11-05). Overlaps the profile page above.
 

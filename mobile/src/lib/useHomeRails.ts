@@ -4,21 +4,19 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '~/lib/AuthProvider';
-import { cardFromCatalog, premiereCard, useCardStates, type CardItem } from '~/lib/cards';
+import { useCandidatePool } from '~/lib/CandidatePoolProvider';
+import { premiereCard, useCardStates, type CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { currentMonth, shiftMonth, todayIso } from '~/lib/dates';
-import { catalogCandidates, catalogHas } from '~/lib/db';
+import { catalogHas } from '~/lib/db';
 import { useHiddenIds } from '~/lib/hidden';
-import { jsHeapMB } from '~/lib/jsHeap';
-import { cardFacets, loadHomeFeed, recommend, tierOf, upcomingRail, type Candidate, type FeedCard, type HomeFeed } from '~/lib/homeFeed';
+import { cardFacets, loadHomeFeed, RAIL_SIZE, recommend, tierOf, upcomingRail, type Candidate, type FeedCard, type HomeFeed } from '~/lib/homeFeed';
 import { useScores, type RowScore } from '~/lib/ScoreProvider';
 import { premiereRows } from '~/lib/seasonPremieres';
 import { useTypeFilter } from '~/lib/typeFilter';
 
-/** The catalog copy's titles not in your library, each with the score its full facets earn. */
-interface Pool { cards: CardItem[]; scores: Map<string, RowScore> }
-
-export function useHomeRails() {
+/** `recommended`: how many titles the Recommended rail holds. Home's fifteen unless the Recommendations page asks for more. */
+export function useHomeRails({ recommended = RAIL_SIZE }: { recommended?: number } = {}) {
   const auth = useAuth();
   const db = useSQLiteContext();
   const catalog = useCatalogSync();
@@ -90,28 +88,9 @@ export function useHomeRails() {
   // "Recommended for you" chooses from the whole catalog copy, not only from
   // the calendar's next months: those alone, scored by genre, left one green
   // card (Nils, 2026-10-17). A catalog row is scored with everything it
-  // carries. Re-read when your rows, the copy or the profile change.
-  const [pool, setPool] = useState<Pool | null>(null);
-  useEffect(() => {
-    let live = true;
-    if (!signedIn || center == null) {
-      setPool(null);
-      return;
-    }
-    // A start rebuilds the profile two or three times (the stored taxonomy, the
-    // fresh one, your rows arriving), and each rebuild starts this again. A run
-    // it replaced stops between chunks: it used to score the whole catalog anyway,
-    // on the same thread as the run whose answer the rail is waiting for (RV31).
-    (async () => {
-      const started = Date.now();
-      const cards = (await catalogCandidates(db)).map(cardFromCatalog);
-      const found = await scoresFor(cards.map((c) => c.id as string), () => live);
-      if (!live) return;
-      setPool({ cards, scores: found });
-      console.log('fandex_pool', JSON.stringify({ titles: cards.length, ms: Date.now() - started, js: jsHeapMB() }));
-    })();
-    return () => { live = false; };
-  }, [db, signedIn, center, scoresFor, revision, catalog.revision, auth.rowsRevision]);
+  // carries. The pool is shared with the Recommendations page
+  // (lib/CandidatePoolProvider.tsx), so the copy is scored once.
+  const pool = useCandidatePool();
 
   const candidates = feed?.candidates;
   const stateOf = useCardStates(useMemo(() => (candidates ?? []).map((c) => c.id), [candidates]));
@@ -147,8 +126,9 @@ export function useHomeRails() {
       center,
       types,
       (c) => (c.id && !c.season ? stateOf(c.id).wishlisted : false),
+      recommended,
     );
-  }, [candidates, center, pool, score, hidden, stateOf, types, today, comingSeasons, premieres]);
+  }, [candidates, center, pool, score, hidden, stateOf, types, today, comingSeasons, premieres, recommended]);
 
   const withoutHidden = useCallback(<T extends CardItem>(items: T[]) => items.filter((i) => !(i.id && hidden.has(i.id))), [hidden]);
 

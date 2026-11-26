@@ -191,15 +191,17 @@ export function useCardKit(items: CardItem[]) {
 // ── Rail ─────────────────────────────────────────────────────────────────────
 
 /** A titled row that scrolls sideways. The header is the site's: serif title, an optional FOR YOU pill, See all. */
-export function Rail({ title, forYou, seeAllHref, action, children }: {
+export function Rail({ title, forYou, seeAllHref, action, note, children }: {
   // `action` replaces See all: the calendar's day rail puts Close there.
   title: string;
   forYou?: boolean;
   seeAllHref?: string;
   action?: ReactNode;
+  /** One quiet line under the title: why this rail is here. */
+  note?: string;
   children: ReactNode;
 }) {
-  return <RailFrame title={title} forYou={forYou} action={action ?? (seeAllHref ? <SeeAll href={seeAllHref} /> : null)}>{children}</RailFrame>;
+  return <RailFrame title={title} forYou={forYou} note={note} action={action ?? (seeAllHref ? <SeeAll href={seeAllHref} /> : null)}>{children}</RailFrame>;
 }
 
 export function RailHeader({ title, forYou, seeAllHref, action }: { title: string; forYou?: boolean; seeAllHref?: string; action?: ReactNode }) {
@@ -226,13 +228,13 @@ const railPlace = (i: number) => ({ x: i * (RAIL_CARD_W + RAIL_GAP), y: 0 });
  * A rail of poster cards, 150 px each. When its titles change (a type filter
  * tapped), the ones going fade out and the rest slide along to close up (components/flip.tsx).
  */
-export function CardRail({ title, items, forYou, seeAllHref, recommended }: {
-  title: string; items: CardItem[]; forYou?: boolean; seeAllHref?: string; recommended?: boolean;
+export function CardRail({ title, items, forYou, seeAllHref, recommended, note }: {
+  title: string; items: CardItem[]; forYou?: boolean; seeAllHref?: string; recommended?: boolean; note?: string;
 }) {
   const { shown, flip } = useFlip(items, cardKeys);
   const kit = useCardKit(shown);
   return (
-    <Rail title={title} forYou={forYou} seeAllHref={seeAllHref}>
+    <Rail title={title} forYou={forYou} seeAllHref={seeAllHref} note={note}>
       {shown.map((item, i) => (
         <FlipCell key={item.key} id={item.key} index={i} flip={flip} place={railPlace}>
           <PosterCard

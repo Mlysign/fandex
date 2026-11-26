@@ -1,8 +1,8 @@
 // Insights: your taste in numbers. The site's page (src/components/insights/
 // InsightsView.tsx), computed here from the rows on the device instead of asked
-// of a server: the overview, how you rate, the spread per medium, taste by era,
-// where you and the crowd disagree, how you rate tags, people and studios, and
-// who turns up most.
+// of a server: the overview, what you seek out (the app's own, 2026-11-26:
+// components/SeekOut.tsx), how you rate, the spread per medium, taste by era,
+// and how you rate tags, people and studios.
 //
 // Every chart is built from what you have rated. The ranking of a tag, person or
 // studio is the site's shrunk average (a facet seen twice does not outrank one
@@ -27,6 +27,7 @@ import { RailFrame } from '~/components/cardFace';
 import { CardRail } from '~/components/cards';
 import { Button, EmptyState, Eyebrow, Panel, Popover, SearchBar, Sheet, SortMenu, useAnchor } from '~/components/kit';
 import { TypeIcon } from '~/components/Logo';
+import { SeekOutSection } from '~/components/SeekOut';
 import { SignIn } from '~/components/SignIn';
 import { Screen } from '~/components/ui';
 import { usePageTitle } from '~/lib/pageTitle';
@@ -513,6 +514,9 @@ export default function InsightsScreen() {
             ...data.byType.map((t) => ({ key: t.type, value: String(t.count), label: TYPE_PLURAL[t.type] ?? t.type, icon: t.type })),
           ]} />
         </View>
+
+        {/* What you pick, before what you rate: "I love steampunk" is this, and no rating chart says it (Nils, 2026-11-26). */}
+        <SeekOutSection boxWidth={Math.min(RAIL_BOX_W, width - 80)} />
 
         <View style={styles.section}>
           <Panel style={{ padding: 16 }}>

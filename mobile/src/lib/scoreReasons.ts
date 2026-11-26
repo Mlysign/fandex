@@ -11,10 +11,13 @@ import type { MediumCalibration } from '~/lib/scoreCalibration';
 
 /**
  * Whether pull (how often you pick a facet) and the Follow buttons that move it
- * reach the screen. Off since 2026-11-05: shown beside the score, it read as
- * part of it (Brad Pitt's page showed a pull row, Helena Bonham Carter's said
- * cast carries no weight). The model still runs; it comes back with the "what
- * should I watch now" page. The dev screens show it regardless.
+ * are shown BESIDE THE SCORE: a title's page, the Why sheet, a facet page's
+ * pill. Off since 2026-11-05: there it read as part of the score (Brad Pitt's
+ * page showed a pull row, Helena Bonham Carter's said cast carries no weight).
+ * Since 2026-11-26 the same model is shown where picking is the question and
+ * no score stands next to it: Insights' "What you seek out" and the
+ * Recommendations page (lib/seekOut.ts, its own switch `SEEK_OUT_LIVE`). The
+ * dev screens show it regardless.
  */
 export const PULL_SHOWN = false;
 
@@ -43,6 +46,9 @@ export function centreSentence(center: number, type?: string, leftOut?: boolean)
 function timesWord(x: number): string {
   return x >= 1.95 ? `${Math.round(x)} times` : `${(Math.round(x * 10) / 10).toFixed(1)} times`;
 }
+
+/** "4×", "1.6×": `timesWord` for a row with no room for the sentence (Insights' "What you seek out"). */
+export const timesShort = (x: number): string => (x >= 1.95 ? `${Math.round(x)}×` : `${(Math.round(x * 10) / 10).toFixed(1)}×`);
 
 /**
  * Pull, beside the number and not in it: "You pick films like this 3 times

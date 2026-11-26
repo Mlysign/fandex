@@ -332,11 +332,14 @@ export const MIN_RATED_FOR_FANDEX_SCORE = 3;
  * facet itself, and a category zeroed for taste can still be what you seek out
  * (anime is filed under art style, which weighs 0 for taste since 2026-10-25).
  */
-export function pullFacetIds(raw: ScoreFacet[], itemId: string | null, tax: Taxonomy): string[] {
+export function pullFacetIds(raw: ScoreFacet[], itemId: string | null, tax: Taxonomy, named?: Map<string, ScoreFacet>): string[] {
   const out = new Set<string>();
   for (const f of resolveFacets(raw, itemId, tax)) {
     if (f.kind === 'tag' && tax.categories.get(tax.tagCategoryOverrides.get(f.key) ?? f.category ?? 'other')?.ignored) continue;
-    out.add(facetId(f));
+    const id = facetId(f);
+    out.add(id);
+    // The first title to carry a facet names it: what a list of facets shows (lib/seekOut.ts).
+    if (named && !named.has(id)) named.set(id, f);
   }
   return [...out];
 }
@@ -355,14 +358,17 @@ export function buildPullModel(picks: ConsumedTitle[], baseline: BaselineTitle[]
 /** Titles resolved between two yields of `buildPullModelSteps`. */
 const RESOLVE_EVERY = 200;
 
-/** `stored`: a fit made on exactly these picks, baseline and taxonomy, reused in place of fitting (pullModel.ts `fitPullModelSteps`). */
-export function* buildPullModelSteps(picks: ConsumedTitle[], baseline: BaselineTitle[], tax: Taxonomy, stored?: StoredPullFit): Steps<PullModel | null> {
+/**
+ * `stored`: a fit made on exactly these picks, baseline and taxonomy, reused in place of fitting (pullModel.ts `fitPullModelSteps`).
+ * `named`: filled with every facet your picks carry, by facet id, for a caller that lists facets by name (lib/seekOut.ts).
+ */
+export function* buildPullModelSteps(picks: ConsumedTitle[], baseline: BaselineTitle[], tax: Taxonomy, stored?: StoredPullFit, named?: Map<string, ScoreFacet>): Steps<PullModel | null> {
   if (!baseline.length) return null;
   const pickRows: PullPick[] = [];
   for (const t of picks) {
     if (!t.type) continue;
     if (pickRows.length % RESOLVE_EVERY === RESOLVE_EVERY - 1) yield;
-    pickRows.push({ id: t.id, type: t.type, weight: t.weight, facets: pullFacetIds(t.facets, t.id, tax) });
+    pickRows.push({ id: t.id, type: t.type, weight: t.weight, facets: pullFacetIds(t.facets, t.id, tax, named) });
   }
   const baselineRows: PullTitle[] = [];
   for (const t of baseline) {
