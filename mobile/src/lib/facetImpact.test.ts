@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateFacets, impactAbsence, pageImpacts, tasteImpactIndex, tasteImpactOf } from './facetImpact';
+import { estimateFacets, impactAbsence, pageCardFacets, pageImpacts, tasteImpactIndex, tasteImpactOf } from './facetImpact';
 import { buildProfile, computeFandexScore, prepareTaxonomy, type RatedTitle, type ScoreFacet, type TaxonomyJson } from './fandexScore';
 
 const json = (over: Partial<TaxonomyJson> = {}): TaxonomyJson => ({
@@ -142,5 +142,26 @@ describe('a Fandex Score for a title nobody holds', () => {
   it('counts a tag page\u2019s own tag once', () => {
     const facets = estimateFacets('tag', 'science fiction', 'Science fiction', undefined, ['Science Fiction', 'Science fiction', 'Space']);
     expect(facets.map((f) => f.key)).toEqual(['science fiction', 'space']);
+  });
+
+  // The Windup Girl on the steampunk page (Nils, 2026-11-26): Open Library lists it under the
+  // tag, Fandex's stored facets dropped it, and the card read 84 from the page's tag while its
+  // own page read 76 from what Fandex stores.
+  it('scores a title Fandex holds from its stored facets under its own id, never from the page\u2019s tag', () => {
+    const stored = [tag('romance')];
+    const card = { id: 'windup', key: 'openlibrary:book:OL1W', genres: ['Science Fiction', 'Dystopian'], heldFacets: stored };
+    const from = pageCardFacets('tag', 'science fiction', 'Science fiction', card);
+    expect(from).toEqual({ id: 'windup', facets: stored });
+    // The page's own tag would have pushed it up; what Fandex stores pulls it down, as the title's page says.
+    const onPage = computeFandexScore(from!.facets, from!.id, profile, tax)!.score;
+    const estimated = computeFandexScore(estimateFacets('tag', 'science fiction', 'Science fiction', undefined, card.genres), card.key, profile, tax)!.score;
+    expect(onPage).toBeLessThan(estimated);
+  });
+
+  it('gives a held title no number when its facets did not arrive, and estimates only a title nobody holds', () => {
+    expect(pageCardFacets('tag', 'science fiction', 'Science fiction', { id: 'windup', key: 'openlibrary:book:OL1W', genres: ['Dystopian'] })).toBeNull();
+    const unheld = pageCardFacets('tag', 'science fiction', 'Science fiction', { id: null, key: 'openlibrary:book:OL2W', genres: ['Dystopian'] });
+    expect(unheld?.id).toBe('openlibrary:book:OL2W');
+    expect(unheld?.facets.map((f) => f.key)).toEqual(['science fiction', 'dystopian']);
   });
 });

@@ -487,7 +487,9 @@ Each of these is a way the Worker differs from the site, and each has a test.
   `done:{version}`), each one read batch, one guarded write batch and three row writes (the item
   row, its pool index, the doc). It runs only while `kv` `rederive_go` holds the version as a
   string, so the writes are priced and agreed before they are spent:
-  `INSERT INTO kv (key, value) VALUES ('rederive_go', '5')` (the current version). The pool of
+  `INSERT INTO kv (key, value) VALUES ('rederive_go', '5')` (the version to walk for). Version 6
+  (2026-11-26, a title's page lists the keyword tier past the cap) moves `merged` only, so it needs
+  no walk: every read heals, at one more query and a merge for a game or a book. The pool of
   2026-10-25 was 4,614 items, about 14,000 writes over three days of runs. Since 2026-11-21 the
   walk and the TMDB projection refetch also run on the every-minute trigger (five items and three
   links a run there, after the Hardcover walk): on the ten-minute trigger alone a bump took nine

@@ -412,6 +412,28 @@ exports[`explainMerge characterization > game debug matrix 1`] = `
     ],
   },
   {
+    "field": "keywords",
+    "final": [],
+    "perSource": {
+      "igdb": [],
+      "rawg": [],
+      "steam": [],
+    },
+    "priority": [
+      "rawg",
+      "steam",
+      "tmdb",
+      "trakt",
+      "letterboxd",
+      "igdb",
+      "openlibrary",
+      "hardcover",
+      "bgg",
+    ],
+    "strategy": "union",
+    "winners": [],
+  },
+  {
     "field": "platforms",
     "final": [
       "Windows",
@@ -758,16 +780,6 @@ exports[`explainMerge characterization > game debug matrix 1`] = `
   },
   {
     "field": "cast",
-    "final": [],
-    "perSource": {},
-    "priority": [
-      "tmdb",
-    ],
-    "strategy": "tmdb-only",
-    "winners": [],
-  },
-  {
-    "field": "keywords",
     "final": [],
     "perSource": {},
     "priority": [
@@ -1186,6 +1198,36 @@ exports[`explainMerge characterization > movie debug matrix 1`] = `
     ],
   },
   {
+    "field": "keywords",
+    "final": [
+      "dream",
+      "heist",
+    ],
+    "perSource": {
+      "letterboxd": [],
+      "tmdb": [
+        "dream",
+        "heist",
+      ],
+      "trakt": [],
+    },
+    "priority": [
+      "rawg",
+      "steam",
+      "tmdb",
+      "trakt",
+      "letterboxd",
+      "igdb",
+      "openlibrary",
+      "hardcover",
+      "bgg",
+    ],
+    "strategy": "union",
+    "winners": [
+      "tmdb",
+    ],
+  },
+  {
     "field": "platforms",
     "final": [],
     "perSource": {},
@@ -1486,26 +1528,6 @@ exports[`explainMerge characterization > movie debug matrix 1`] = `
           "name": "Elliot Page",
           "profileUrl": null,
         },
-      ],
-    },
-    "priority": [
-      "tmdb",
-    ],
-    "strategy": "tmdb-only",
-    "winners": [
-      "tmdb",
-    ],
-  },
-  {
-    "field": "keywords",
-    "final": [
-      "dream",
-      "heist",
-    ],
-    "perSource": {
-      "tmdb": [
-        "dream",
-        "heist",
       ],
     },
     "priority": [

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // failed. A Worker 502 for an author's books once read as "they wrote one book",
 // with nothing on the page saying more had been asked and lost (2026-11-03).
 
-const worker = vi.hoisted(() => ({ facetBooks: vi.fn(), facetGames: vi.fn(), lookup: vi.fn() }));
+const worker = vi.hoisted(() => ({ facetBooks: vi.fn(), facetGames: vi.fn(), lookup: vi.fn(), lookupFacets: vi.fn() }));
 vi.mock('~/lib/api', () => ({ api: worker }));
 const config = vi.hoisted(() => ({ key: 'k' }));
 vi.mock('~/lib/config', () => ({ get TMDB_API_KEY() { return config.key; }, tmdbConfigured: () => config.key.length > 0 }));
@@ -36,6 +36,19 @@ describe('providerFacet', () => {
     worker.facetBooks.mockRejectedValue(new Error('provider-unavailable'));
     const p = await providerFacet('person', 'jason schreier', 'Jason Schreier', 'DE');
     expect(p.failed).toEqual(['books']);
+  });
+
+  it('gives a book Fandex holds outside the copy its stored facets, so the card scores as its page does', async () => {
+    tmdb(true);
+    worker.facetBooks.mockResolvedValue({ results: [book('OL1W', 'The Windup Girl'), book('OL2W', 'Boneshaker')] });
+    worker.lookup.mockResolvedValue({ found: [{ source: 'openlibrary', type: 'book', id: 'OL1W', mediaItemId: 'windup', slug: 'the-windup-girl' }], missing: [] });
+    worker.lookupFacets.mockResolvedValue({ found: [{ source: 'openlibrary', type: 'book', id: 'OL1W', mediaItemId: 'windup', facets: [{ kind: 'tag', key: 'dystopian', label: 'Dystopian' }] }], missing: [] });
+    const p = await providerFacet('tag', 'steampunk', 'Steampunk', 'DE', undefined, async () => new Set());
+    expect(p.cards.map((c) => [c.title, c.id, c.heldFacets?.map((f) => f.key) ?? null])).toEqual([
+      ['The Windup Girl', 'windup', ['dystopian']],
+      ['Boneshaker', null, null],
+    ]);
+    expect(worker.lookupFacets).toHaveBeenCalledWith([{ source: 'openlibrary', type: 'book', id: 'OL1W' }]);
   });
 
   it('keeps the books when TMDB fails, and names TMDB', async () => {

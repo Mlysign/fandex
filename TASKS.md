@@ -11,7 +11,7 @@
 
 ## ⚠️ Needs Nils: this is the whole list
 
-Eight items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
+Ten items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
 
 0. **🔵 APP + WEBSITE ON CLOUDFLARE: online since 2026-10-10.** The plan is [docs/app-plan.md](docs/app-plan.md); the references are [docs/website.md](docs/website.md), [docs/worker.md](docs/worker.md) and [docs/app.md](docs/app.md).
    - **(a) Keep using the app and the site, and say what is off.** **Asked of him and not answered yet:** only **0.3.45's first run** (a new account's two windows: run end to end on the local stack in a browser 2026-11-07, never on the phone, and a real new account through Trakt, Google or Discord has not been made). Feedback on feel goes into numbers in `mobile/src/lib/feel.ts` and `components/pressFeel.ts`, never back to him as a question (memory `rating-feel-from-bubblewrap`). Everything else asked here was checked by Nils on 2026-11-13 (archive: grep `2026-11-13`). The episode sheet, the Harry Potter rails and the type filter's one tap were checked over adb on 2026-11-06 (archive: grep `2026-11-06`). Every admin write, Review's Add and disconnecting one of two sign-ins were run on the local stack on 2026-10-23 and work (archive: grep "the open tasks").
@@ -27,6 +27,8 @@ Eight items. Everything else in this file is work I can do without him, and ever
 9. **🔵 One real Steam connect, by him** (Settings, "Connect Steam", on the phone and once in a browser). Built and covered by tests; the real Steam page has not been through it.
 
 10. **🔵 What only he can do from the security audit of 2026-11-22.** The list is `docs/release-plan/private/security-audit-2026-11-22.md` (not in git): every row whose status is "Nils", sections A to E. The first row of section A comes before everything else on this list. Each Cloudflare setting in section E I can set on his word.
+
+11. **🔵 Deploy the tags-on-the-page change (PR #82, 2026-11-26).** His call that day: a title's page shows a tag whether or not the score counts it, and the score keeps counting the first eight (measured, `docs/fandex-score.md` §3.9). In the branch and tested, not live: after the merge it needs `npx wrangler deploy` from `worker/` (derive version 6, no migration, no re-derive walk), an APK (0.3.66: a card on a tag page scores as its title's page does) and a site publish.
 
 4. **🔵 Board games are built and switched off until a BoardGameGeek token exists** (2026-10-17). **Applied 2026-10-17, still "pending" on 2026-11-21** (read in his Chrome) at boardgamegeek.com/applications (account Ramses3006, application "Fandex"), and no mail from BGG in his Gmail since 2024. Nils: once BGG approves it, create the token there and add `BGG_TOKEN=` to the repo's `.env` (a token never passes through a session). Then mine: `node worker/scripts/push-secrets.mjs`, check `/v1/features` says `boardgames: true`, put the official "Powered by BGG" logo where the text credit is now (the terms require the logo), publish, build an APK. → [PLATFORMS.md](PLATFORMS.md)
 

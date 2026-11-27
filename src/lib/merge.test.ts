@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergeForCanonical, mergeLinks, normalizeName, extractYear, TIER_CAPS } from "./merge";
+import { mergeForCanonical, mergeLinks, normalizeName, extractYear, KEYWORD_DISPLAY_CAP, TIER_CAPS } from "./merge";
 
 // Pure-function coverage for the canonical merge + the normalization helpers the
 // matcher relies on. No DB — these are the priority/format rules in isolation.
@@ -153,5 +153,32 @@ describe("tag tiers (2026-10-25)", () => {
     const film = mergeLinks([link("tmdb", { genres: [{ name: "Drama" }], keywords: { keywords: [{ name: "heist" }] } })], "movie");
     expect(film.tagTiers).toEqual([{ name: "Drama", tier: "genre", rank: 1 }, { name: "heist", tier: "keyword", rank: 1 }]);
     expect(film.keywords).toEqual(["heist"]);
+  });
+
+  // The Windup Girl (Nils, 2026-11-26): Open Library lists it under steampunk, past the eight
+  // subjects that count, so it sat on the steampunk page and its own page did not show the tag.
+  it("shows a book's subjects the score does not count, and counts the same eight", () => {
+    const subjects = ["Bioterrorism", "Dystopian", "Terrorism", "Artificial intelligence", "Gene hacking", "Social aspects", "Climate", "Thailand", "Steampunk"];
+    const book = mergeLinks([link("openlibrary", { title: "The Windup Girl", subject: subjects })], "book");
+    const counted = book.tagTiers!.filter((t) => t.tier === "keyword").map((t) => t.name);
+    expect(counted).toHaveLength(TIER_CAPS.keyword);
+    expect(counted).not.toContain("Steampunk");
+    // The page's list holds every one of them, the ninth included.
+    expect(book.keywords).toEqual(subjects);
+    expect(book.tags).not.toContain("Steampunk");
+  });
+
+  it("shows a game's keywords up to the page's cap, noise last, each tag once across sources", () => {
+    const game = mergeLinks([
+      link("igdb", { keywords: [{ name: "steam achievements" }, ...kw(KEYWORD_DISPLAY_CAP + 6)] }),
+      link("bgg", { families: [] }),
+    ], "game");
+    expect(game.keywords).toHaveLength(KEYWORD_DISPLAY_CAP);
+    expect(game.keywords?.slice(0, 2)).toEqual(["kw 1", "kw 2"]);
+    expect(game.keywords).not.toContain("steam achievements");
+    // The facets are what they were: eight.
+    expect(game.tagTiers!.filter((t) => t.tier === "keyword")).toHaveLength(TIER_CAPS.keyword);
+    const twice = mergeLinks([link("tmdb", { keywords: { keywords: [{ name: "Heist" }] } }), link("igdb", { keywords: [{ name: "heist" }, { name: "noir" }] })], "movie");
+    expect(twice.keywords).toEqual(["Heist", "noir"]);
   });
 });

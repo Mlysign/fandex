@@ -230,9 +230,10 @@ export interface EnrichedItem {
   communityScore?: number | null;
   developer: string | null;
   publisher: string | null;
-  // Movie/show credits + keywords (from TMDB)
+  // Movie/show credits (from TMDB)
   director?: string | null;        // movie director, or show creator
   cast?: { name: string; character: string | null; profileUrl?: string | null }[];
+  /** Every source's keyword-tier tags, for the page: shown whether or not the score counts them (merge.ts, `KEYWORD_DISPLAY_CAP`). */
   keywords?: string[];
   trailerYoutubeKey: string | null;
   steamTrailerUrl: string | null;

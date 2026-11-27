@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { attachFacets, balanceByType, cardFacets, LOOKUP_FACETS_MAX, MAX_OWN_UPCOMING, RAIL_SIZE, recommend, tierOf, upcomingRail, type Candidate, type FeedCard, type Scored } from '~/lib/homeFeed';
+import { attachFacets, balanceByType, cardFacets, holdCards, LOOKUP_FACETS_MAX, MAX_OWN_UPCOMING, RAIL_SIZE, recommend, tierOf, upcomingRail, type Candidate, type FeedCard, type Scored } from '~/lib/homeFeed';
 
 /** A score as `recommend` takes one: the number that ranks, with its band as the score computes it around an average of 50 (green from 60, orange under 40). */
 const scored = (n: number | null | undefined, center = 50): Scored | null => (n == null ? null : { score: n, band: n >= center + 10 ? 'high' : n <= center - 10 ? 'low' : 'usual' });
@@ -151,5 +151,45 @@ describe('Fandex facets for cards the catalog copy lacks (2026-11-07)', () => {
 
   it('scores a card from its held facets before its genres', () => {
     expect(cardFacets({ heldFacets: [facet('revenge')], genres: ['Drama'] })).toEqual([facet('revenge')]);
+  });
+});
+
+describe('the one lookup for provider cards (2026-11-26)', () => {
+  const card = (sourceId: string) =>
+    ({ key: `openlibrary:book:${sourceId}`, id: null, source: 'openlibrary', sourceId, type: 'book', title: sourceId, releaseDate: null, posterUrl: null, communityScore: null }) as FeedCard;
+  const found = (sourceId: string, mediaItemId: string) => ({ source: 'openlibrary', type: 'book', id: sourceId, mediaItemId, slug: `slug-${sourceId}` });
+  const facet = (key: string) => ({ kind: 'tag' as const, key, label: key });
+  const lookup = async () => ({ found: [found('held-in-copy', 'a'), found('held-outside', 'b')], missing: [] });
+
+  it('names the held cards, and gives the ones outside the copy the facets Fandex stores', async () => {
+    const cards = [card('held-in-copy'), card('held-outside'), card('unheld')];
+    const asked: string[][] = [];
+    await holdCards(cards, async () => new Set(['a']), {
+      lookup,
+      lookupFacets: async (refs) => { asked.push(refs.map((r) => r.id)); return { found: refs.map((r) => ({ ...found(r.id, 'b'), facets: [facet('dystopian')] })), missing: [] }; },
+    });
+    expect(cards.map((c) => [c.id, c.slug ?? null])).toEqual([['a', 'slug-held-in-copy'], ['b', 'slug-held-outside'], [null, null]]);
+    // Only the held card the copy lacks is asked about, and only it carries facets.
+    expect(asked).toEqual([['held-outside']]);
+    expect(cards.map((c) => c.heldFacets?.[0]?.key ?? null)).toEqual([null, 'dystopian', null]);
+  });
+
+  it('asks for no facets without a copy to compare with', async () => {
+    const cards = [card('held-outside')];
+    let calls = 0;
+    await holdCards(cards, undefined, { lookup, lookupFacets: async () => { calls++; return { found: [], missing: [] }; } });
+    expect(cards[0].id).toBe('b');
+    expect(calls).toBe(0);
+  });
+
+  it('leaves every card as it was when the lookup fails', async () => {
+    const cards = [card('held-outside')];
+    let calls = 0;
+    await holdCards(cards, async () => new Set(), {
+      lookup: async () => { throw new Error('offline'); },
+      lookupFacets: async () => { calls++; return { found: [], missing: [] }; },
+    });
+    expect(cards[0].id).toBeNull();
+    expect(calls).toBe(0);
   });
 });

@@ -34,9 +34,9 @@ import { Screen, StateBlock } from '~/components/ui';
 import { useAuth } from '~/lib/AuthProvider';
 import { cardFromCatalog, useCardStates, type CardItem } from '~/lib/cards';
 import { creditLine } from '~/lib/creditLine';
-import { estimateFacets, spokenKey, type ImpactKind, type PageImpact } from '~/lib/facetImpact';
+import { pageCardFacets, spokenKey, type ImpactKind, type PageImpact } from '~/lib/facetImpact';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
-import type { CatalogRow } from '~/lib/db';
+import { catalogHas, type CatalogRow } from '~/lib/db';
 import { useOfferedTypes } from '~/lib/features';
 import { seriesOfFacet, splitSeries, type SeriesKey } from '~/lib/franchiseSeries';
 import { tagPageKeys } from '~/lib/tagBundles';
@@ -265,7 +265,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
     if (!ready) return;
     const abort = new AbortController();
     setAsking(true);
-    providerFacet(kind, key, label || key, auth.region, abort.signal)
+    providerFacet(kind, key, label || key, auth.region, abort.signal, (ids) => catalogHas(db, ids))
       .then((p) => {
         if (abort.signal.aborted) return;
         // A half that failed this time keeps what it gave last time: a retry never shrinks the page.
@@ -281,7 +281,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
       })
       .finally(() => { if (!abort.signal.aborted) setAsking(false); });
     return () => abort.abort();
-  }, [kind, key, label, ready, attempt, auth.region]);
+  }, [db, kind, key, label, ready, attempt, auth.region]);
 
   const cards = useMemo(() => {
     const own = found?.cards;
@@ -303,12 +303,14 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const stateOf = useCardStates(ids);
   const scores = useRowScores(useMemo(() => ids.filter((i): i is string => !!i), [ids]));
 
-  // Every card with the score it can have: the catalog's for a title the device
-  // holds, an estimate from this page's facet for one it does not.
+  // Every card with the score it can have: the catalog copy's for a title the
+  // device holds, Fandex's stored facets for one it holds outside the copy, and
+  // an estimate from this page's facet only for a title nobody holds (`pageCardFacets`).
   const scored = useMemo(() => (cards ?? []).map((c) => {
-    if (c.id && scores.has(c.id)) return c;
-    const estimate = center == null ? null : score(c.key, estimateFacets(kind, key, label || key, c.roles, c.genres), c.type);
-    return estimate == null ? c : { ...c, fandexScore: estimate.score, match: { score: estimate.score, band: estimate.band } };
+    if (center == null || (c.id && scores.has(c.id))) return c;
+    const from = pageCardFacets(kind, key, label || key, c);
+    const fx = from ? score(from.id, from.facets, c.type) : null;
+    return fx == null ? c : { ...c, fandexScore: fx.score, match: { score: fx.score, band: fx.band } };
   }), [cards, scores, center, score, kind, key, label]);
 
   // Narrowed: the kept types, then the sheet's filters.

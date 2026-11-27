@@ -41,6 +41,21 @@ export function estimateFacets(kind: 'tag' | 'person' | 'studio' | 'franchise', 
   return [...own, ...tags];
 }
 
+/**
+ * What a facet page scores a card from when the device's catalog copy gave it
+ * no score, and the id it is scored under. A title Fandex holds is scored from
+ * Fandex's stored facets under its own id, or not at all: its own page reads
+ * those and nothing else, so an estimate beside them is a second number for one
+ * title. Only a title nobody holds gets the estimate above, under its card key.
+ */
+export function pageCardFacets(
+  kind: 'tag' | 'person' | 'studio' | 'franchise', key: string, label: string,
+  card: { id: string | null; key: string; roles?: string[]; genres?: string[]; heldFacets?: ScoreFacet[] },
+): { id: string; facets: ScoreFacet[] } | null {
+  if (card.id) return card.heldFacets?.length ? { id: card.id, facets: card.heldFacets } : null;
+  return { id: card.key, facets: estimateFacets(kind, key, label, card.roles, card.genres) };
+}
+
 /** A stored key as an address spells it: hyphens and runs of spaces are one space (src/lib/facetUrl.ts, slugToKey). */
 export const spokenKey = (key: string) => key.toLowerCase().replace(/-+/g, ' ').replace(/\s+/g, ' ').trim();
 

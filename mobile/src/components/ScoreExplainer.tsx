@@ -43,15 +43,15 @@ function useMatchState(item: CardItem, enabled: boolean): { match: FandexScore |
     let live = true;
     void db.getFirstAsync<{ facets: string }>('SELECT facets FROM catalog WHERE id = ?', [id]).then((row) => {
       if (!live) return;
-      // A title the catalog copy lacks (scored from the lookup's facets) has nothing to break down here.
-      setMatch(row ? score(id, parseFacets(row.facets), item.type) : null);
+      // A title the catalog copy lacks is broken down from the facets the lookup sent, the ones its card was scored from.
+      setMatch(row ? score(id, parseFacets(row.facets), item.type) : item.heldFacets?.length ? score(id, item.heldFacets, item.type) : null);
       setMatchFor(id);
     }, (e: unknown) => {
       console.warn('score_reasons_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
       if (live) { setMatch(null); setMatchFor(id); }
     });
     return () => { live = false; };
-  }, [db, id, item.type, enabled, score]);
+  }, [db, id, item.type, item.heldFacets, enabled, score]);
   return { match: matchFor === id ? match : null, done: matchFor === id || !id };
 }
 
