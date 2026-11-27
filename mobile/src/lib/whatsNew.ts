@@ -19,7 +19,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     version: '0.3.66',
     date: '2026-11-27',
     lines: [
-      'A Recommendations page. It shows your best matches, then rows of titles chosen for the things you pick most often. Open it with See all on Home.',
+      'A Recommendations page. It shows the titles that fit your taste most, then rows of titles chosen for the things you pick most often. Open it with See all on Home.',
       'Insights has a new section, "What you seek out". It lists the tags, people, studios and franchises you pick far more often than most people do.',
       'A title\'s page lists more of its tags.',
     ],
