@@ -20,6 +20,6 @@
     "@types/node": "^26.6.6",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11",
-    "wrangler": "^4.162.0"
+    "wrangler": "^4.164.0"
   }
 }
