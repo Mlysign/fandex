@@ -275,6 +275,8 @@ export function recommend<T extends Candidate>(
   types?: readonly string[],
   /** Titles on your wishlist: they may be recommended, `MAX_WISHLISTED` to a rail. */
   wishlisted: (c: T) => boolean = () => false,
+  /** How many titles the rail holds: Home's fifteen, or more on the Recommendations page. */
+  size = RAIL_SIZE,
 ): (T & { fandexScore: number })[] {
   if (center == null) return [];
   const seen = new Set<string>();
@@ -294,7 +296,7 @@ export function recommend<T extends Candidate>(
   }
   let kept = 0;
   const capped = ranked.filter((c) => !wishlisted(c) || kept++ < MAX_WISHLISTED);
-  return balanceByType(capped, RAIL_SIZE, 'recommendation');
+  return balanceByType(capped, size, 'recommendation');
 }
 
 /**

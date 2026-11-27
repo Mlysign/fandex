@@ -134,7 +134,7 @@ export default function HomeScreen() {
           <EmptyState title="Nothing to show right now" hint="The providers didn't return any releases for today's page." />
         ) : (
           <>
-            {personalPending ? <RailSkeleton title="Recommended for you" /> : rail('Recommended for you', recommendation, '/discover', true)}
+            {personalPending ? <RailSkeleton title="Recommended for you" /> : rail('Recommended for you', recommendation, '/recommendations', true)}
             {rail('Popular right now', trending ?? feed.trending, '/discover')}
             {rail('Upcoming', upcoming?.length ? upcoming : feed.upcoming, '/calendar')}
             {/* Not filtered by media type, as on the site: a director is not a movie,

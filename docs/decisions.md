@@ -337,6 +337,17 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
 - **Episode tracking does not need Trakt** (Nils, same day). A device without Trakt saves a tick to Fandex alone (source `local`) and works out what is next from TMDB's `/tv/{id}`; the next Trakt sync on a device that has Trakt sends those ticks there. TMDB keeps no record of watched episodes, so there is nothing to sync with TMDB.
 - **Home's rails follow the same season rule** (same day). Upcoming always carries the new seasons you are waiting for over the next three months, up to 7 of its 15, the popular titles filling the rest. Recommended counts one as still to come, scored from the show's full facets, and carries it only on a strong match, though the show is in your library. Popular right now labels a trending show "Season n" while its new season is out or due; it cannot make a show trend.
 
+### Added 2026-11-26, what you seek out (docs/fandex-score.md §3.7.1)
+
+- **How many titles of a facet you logged stays out of the score, and is shown as what it is.** The score predicts a rating; what you pick is pull. Pull is on the screen again in two places where no score stands beside it: Insights' "What you seek out" and the Recommendations page. In words and counts, never points. `PULL_SHOWN` stays false: nothing returns to a title's page or the Why sheet, and no pull points or Follow to a facet page.
+- **A facet's page says what its Insights row says** (Nils): one "Picks 4×" line in words under the Taste pill, marked "not part of your score".
+- **An Insights row is the name, the sentence and "picked of what Fandex holds"; a tap lists your own titles under it** (Nils: no bar, no "vs avg" column).
+- **Home's Recommended rail leads to `/recommendations` with See all** (Nils). The page is rails: the best matches, then "Because you seek out X".
+- **On those rails the facet picks and the score gates.** A title the score puts below your usual is never recommended (2026-10-17 stands), whatever you seek out. The kinds take turns, or franchises fill the page.
+- **The pull fit belongs to the screens that show it, never to the score's profile.** Fitted on demand, kept on the device, and no score waits for it.
+- **Open, with Nils on a design board:** "What you seek out" and the three rating sections become one facet section (picks, your average, score impact in one row), and the facet page follows it. Nothing of that is built until it is drawn.
+- **Open, Nils's to decide after seeing the page:** Recommendations in the bottom bar in Search's place, with search as an icon at the top right that opens a window (TASKS.md).
+
 ### Added 2026-11-05, the UI review
 
 - **Pull is off the screen, and so are Follow and Not interested.** Nils: shown beside the score it read as part of it (Brad Pitt's page showed a pull row, Helena Bonham Carter's said cast carries no weight), "more confusion than benefit". The model still fits and follows still sync; one switch (`PULL_SHOWN`, `mobile/src/lib/scoreReasons.ts`) brings it all back. It returns with the "what now?" page, where picking is the question.

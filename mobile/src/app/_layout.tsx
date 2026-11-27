@@ -15,7 +15,9 @@ import { DATABASE_NAME, migrate } from '~/lib/db';
 // Loaded here, before the router starts, for what it reads at load: the address a Google sign-in came back on.
 import '~/lib/google';
 import { dropPlaceholder } from '~/lib/prerender';
+import { CandidatePoolProvider } from '~/lib/CandidatePoolProvider';
 import { ScoreProvider } from '~/lib/ScoreProvider';
+import { SeekOutProvider } from '~/lib/SeekOutProvider';
 import { TypeFilterProvider } from '~/lib/typeFilter';
 import { ToastProvider } from '~/components/Toast';
 import { ReleaseReminders } from '~/components/ReleaseReminders';
@@ -143,6 +145,9 @@ export default function RootLayout() {
       <AuthProvider>
       <CatalogSyncProvider>
       <ScoreProvider>
+      {/* What you seek out, and the titles a recommendation may be: both built only once a screen asks. */}
+      <SeekOutProvider>
+      <CandidatePoolProvider>
       <TypeFilterProvider>
       <ToastProvider>
         <StatusBar style="light" />
@@ -168,6 +173,8 @@ export default function RootLayout() {
         </Stack>
       </ToastProvider>
       </TypeFilterProvider>
+      </CandidatePoolProvider>
+      </SeekOutProvider>
       </ScoreProvider>
       </CatalogSyncProvider>
       </AuthProvider>

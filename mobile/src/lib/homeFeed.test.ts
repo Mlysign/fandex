@@ -86,6 +86,12 @@ describe('Recommended for you', () => {
     expect(recommend([cards], scoreOf, (c) => c.key === 'stronger', 50).map((c) => c.key)).toEqual(['strong']);
   });
 
+  it('holds fifteen titles on Home, and as many as the Recommendations page asks for', () => {
+    const many = Array.from({ length: 40 }, (_, i) => card(`c${i}`));
+    expect(recommend([many], () => scored(90), () => false, 50)).toHaveLength(RAIL_SIZE);
+    expect(recommend([many], () => scored(90), () => false, 50, undefined, undefined, 30)).toHaveLength(30);
+  });
+
   it('recommends nothing without a taste profile', () => {
     expect(recommend([cards], scoreOf, () => false, null)).toEqual([]);
   });

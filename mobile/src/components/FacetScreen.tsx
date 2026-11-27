@@ -50,7 +50,8 @@ import { PhotoGallery } from '~/components/PhotoGallery';
 import { count } from '~/lib/plural';
 import { setFollow } from '~/lib/itemActions';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
-import { PULL_SHOWN, pullSentence, signed } from '~/lib/scoreReasons';
+import { PULL_SHOWN, pullSentence, signed, timesShort } from '~/lib/scoreReasons';
+import { useSeekOut } from '~/lib/SeekOutProvider';
 import { TYPE_ICONS } from '~/lib/typeIcons';
 import { color, font, radius, type, TYPE_PLURAL } from '~/theme';
 
@@ -130,6 +131,9 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const spoken = slugToKey(params.key ?? '');
   const tagPage = useMemo(() => (kind === 'tag' ? tagPageKeys(spoken, taxonomy) : null), [kind, spoken, taxonomy]);
   const key = kind === 'franchise' && taxonomy ? (taxonomy.ipAliases.get(spoken) ?? spoken) : (tagPage?.key ?? spoken);  const impacts = useMemo(() => impactsFor(IMPACT_KIND[kind], key), [impactsFor, kind, key]);
+  // Whether this is something you seek out, as its Insights row says it (lib/seekOut.ts). Being on this page is what asks.
+  const seek = useSeekOut();
+  const sought = useMemo(() => seek.facets.find((f) => f.id === `${IMPACT_KIND[kind]}|${key}`) ?? null, [seek.facets, kind, key]);
   const [sort, setSort] = useState<Sort>('popularity');
   const [bioOpen, setBioOpen] = useState(false);
   /** The photo the gallery is open on, or null while it is shut. */
@@ -453,6 +457,13 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
               </View>
             );
           })}
+          {/* What you pick, in words and never as points: beside "Taste +4.2" a "Pull +3.1" read as a second part of the score (2026-11-05). */}
+          {sought ? (
+            <View style={styles.impact}>
+              <Text style={[styles.impactPill, IMPACT_TONE.neutral]}>Picks {timesShort(sought.times)}</Text>
+              <Text style={[type.bodySm, { flex: 1, minWidth: 0 }]}>{pullSentence(sought)} · not part of your score</Text>
+            </View>
+          ) : null}
           {/* No impact row has a reason, and the reason is said (AGENTS.md: a component that renders null must know why). */}
           {absence ? <Text style={[type.caption, { color: color.textSecondary, marginTop: 12 }]}>{absence}</Text> : null}
           {/* A follow moves pull and nothing else, so it leaves the page with pull (PULL_SHOWN, scoreReasons.ts). */}
