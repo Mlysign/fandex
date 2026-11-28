@@ -350,7 +350,13 @@ export interface ScoreSummary { version: number; binFrom: number; media: ScoreSu
 export const api = {
   health: () => request<Health>('/v1/health'),
 
-  item: (id: string, region?: string) => request<ItemDetail>(`/v1/items/${encodeURIComponent(id)}${q({ region })}`),
+  /**
+   * `id` is an item id or the public `{type}/{slug}`. Each part is encoded on its own:
+   * encoding the whole made the slash `%2F`, the Worker answered 400, and every title
+   * page opened from a card said "Nothing here" (0.3.64 to 0.3.66).
+   */
+  item: (id: string, region?: string) =>
+    request<ItemDetail>(`/v1/items/${id.split('/').map(encodeURIComponent).join('/')}${q({ region })}`),
 
   /** Find or fetch a provider title. The only call that can make the Worker ask a provider. */
   resolve: (source: string, type: string, id: string) =>

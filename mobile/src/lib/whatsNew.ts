@@ -16,6 +16,13 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.3.67',
+    date: '2026-11-28',
+    lines: [
+      'Tapping a title opens its page again. Since 0.3.64 most titles said "Nothing here" instead.',
+    ],
+  },
+  {
     version: '0.3.66',
     date: '2026-11-27',
     lines: [
